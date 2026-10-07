@@ -1,17 +1,21 @@
-# Interfaz gráfica — `fotoelectrico-app`
+# `fotoelectrico-app` — interfaz y puente al motor
 
-Prototipo visual de escritorio con Macroquad + egui. La app mantiene la UI desacoplada de la crate física: los controles viven en `state::LabControls` y los valores de salida se reciben en `state::PhysicsReadout`.
+Propósito: presentar controles y lecturas, y ser el único punto que llama al motor físico. No contiene ecuaciones: delega en `physics_adapter`.
+
+## Cómo funciona
+
+1. El usuario mueve un control (`state::ExperimentControls`).
+2. `physics_adapter::refresh_state` recalcula `PhysicsReadout` principal + comparación y la curva `Kmax(λ)` (61 puntos, 180–900 nm).
+3. `main.rs` empaqueta un `SceneFrame` y `engine` lo dibuja.
+
+Supuestos del puente (documentados en código y en `docs/physics-model.md`): 100 % = 10 mW/cm², `flujo = P/E_fotón`, colección bloqueada si `V < −V₀`.
 
 ## Ejecutar
-
-Desde la raíz del workspace:
 
 ```bash
 cargo run -p fotoelectrico-app
 ```
 
-## Límite de responsabilidad
+Estructura: `state.rs` (controles, lecturas, preferencias), `physics_adapter.rs` (puente), `ui.rs` (paneles y pestañas), `visualization.rs` (gráfica y espectro), `persistence.rs` (diseño guardado), `main.rs` (loop + `SceneFrame`).
 
-Este crate **no calcula física**. Mientras `PhysicsReadout` esté vacío, el panel de resultados muestra que la integración está pendiente y la celda anima partículas de manera ilustrativa. Al conectar el módulo de tu compañero, la capa de aplicación puede llenar `PhysicsReadout` con los resultados; la UI ya sabe presentarlos.
-
-El control de voltaje y la animación son controles visuales de prototipo, no una simulación del campo eléctrico ni trayectorias integradas.
+Guía de uso en [`docs/user-guide.md`](../../docs/user-guide.md); contrato entre crates en [`docs/architecture.md`](../../docs/architecture.md).

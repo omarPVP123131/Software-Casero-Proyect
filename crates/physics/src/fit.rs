@@ -12,10 +12,10 @@ pub struct DataPoint {
 /// Resultado del ajuste por regresión lineal
 #[derive(Debug, Clone)]
 pub struct LinearFitResult {
-    pub slope_m: f64,           // Pendiente (V·s)
-    pub intercept_b: f64,       // Intersección (V)
-    pub h_experimental: f64,    // Constante de Planck estimada (J·s)
-    pub error_percentage: f64,  // Error porcentual comparado con el valor teórico
+    pub slope_m: f64,          // Pendiente (V·s)
+    pub intercept_b: f64,      // Intersección (V)
+    pub h_experimental: f64,   // Constante de Planck estimada (J·s)
+    pub error_percentage: f64, // Error porcentual comparado con el valor teórico
 }
 
 /// Realiza una regresión lineal sobre una lista de puntos (f, V0)
@@ -72,13 +72,22 @@ mod tests {
     fn test_linear_fit_planck() {
         // Puntos teóricos idénticos derivados de V0 = (h/e)*f - (Φ/e)
         let sample_points = vec![
-            DataPoint { frequency_hz: 6.0e14, stopping_potential_v: 0.191 },
-            DataPoint { frequency_hz: 7.0e14, stopping_potential_v: 0.605 },
-            DataPoint { frequency_hz: 8.0e14, stopping_potential_v: 1.019 },
+            DataPoint {
+                frequency_hz: 6.0e14,
+                stopping_potential_v: 0.191,
+            },
+            DataPoint {
+                frequency_hz: 7.0e14,
+                stopping_potential_v: 0.605,
+            },
+            DataPoint {
+                frequency_hz: 8.0e14,
+                stopping_potential_v: 1.019,
+            },
         ];
 
         let result = fit_planck_constant(&sample_points).unwrap();
-        
+
         // El error debe ser menor al 1% con datos ideales
         assert!(result.error_percentage < 1.0);
     }

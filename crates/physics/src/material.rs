@@ -10,11 +10,17 @@ pub struct Material {
 }
 
 impl Material {
-    /// Crea un nuevo material ingresando la función de trabajo en eV
+    /// Crea un nuevo material ingresando la función de trabajo en eV.
+    /// Garantía: Φ inválida (NaN/inf/<=0) se satura a 2.36 eV (sodio) en vez de fallar.
     pub fn new(name: &str, work_function_ev: f64) -> Self {
+        let clean_ev = if work_function_ev.is_finite() && work_function_ev > 0.05 {
+            work_function_ev.clamp(0.1, 10.0)
+        } else {
+            2.36
+        };
         Self {
             name: name.to_string(),
-            work_function_j: ev_to_joules(work_function_ev),
+            work_function_j: ev_to_joules(clean_ev),
         }
     }
 

@@ -1,24 +1,42 @@
-//! Interfaz desacoplada para el laboratorio fotoeléctrico.
-//!
-//! La capa física puede alimentar [`PhysicsReadout`] sin que esta crate
-//! implemente ni modifique las ecuaciones del simulador.
+//! Interfaz egui conectada al motor físico y al renderer Macroquad.
 
+mod persistence;
+pub mod physics_adapter;
 pub mod state;
 mod theme;
 mod ui;
 mod visualization;
 
-pub use state::{CurvePoint, LabControls, MaterialChoice, PhysicsReadout};
+pub use persistence::UiPersistence;
+pub use physics_adapter::{
+    electron_speed_scale, photoelectron_strength, refresh_state, REFERENCE_IRRADIANCE_W_M2,
+};
+pub use state::{
+    AppState, CurvePoint, DockPanel, ExperimentControls, HistoryEntry, InspectedObject, LabTab,
+    LayoutPreset, MaterialChoice, PhysicsReadout,
+};
 
-/// Dibuja la interfaz para el frame actual.
-pub fn draw(
-    ctx: &egui_macroquad::egui::Context,
-    controls: &mut LabControls,
-    readout: &PhysicsReadout,
-    time_seconds: f64,
-) {
-    theme::apply(ctx);
-    ui::draw(ctx, controls, readout, time_seconds);
+/// Región del canvas que `engine` debe dibujar después de construir la UI.
+#[derive(Debug, Clone, Copy)]
+pub struct UiFrame {
+    pub scene_rect: Option<egui_macroquad::egui::Rect>,
+    /// Conversión desde puntos egui a unidades lógicas de Macroquad.
+    pub coordinate_scale: f32,
+}
+
+impl Default for UiFrame {
+    fn default() -> Self {
+        Self {
+            scene_rect: None,
+            coordinate_scale: 1.0,
+        }
+    }
+}
+
+/// Construye los widgets egui y devuelve el espacio reservado para la celda.
+pub fn draw_ui(ctx: &egui_macroquad::egui::Context, state: &mut AppState) -> UiFrame {
+    theme::apply(ctx, state.preferences.theme, state.preferences.font_scale);
+    ui::draw(ctx, state)
 }
 
 #[cfg(test)]

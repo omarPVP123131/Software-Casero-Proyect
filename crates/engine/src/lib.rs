@@ -1,10 +1,10 @@
-//! Crate de renderizado del simulador.
-//!
-//! Este crate es intencionalmente un esqueleto: define la separación prevista
-//! para escena y renderer, pero todavía no contiene renderizado ejecutable.
-//! La interfaz gráfica actual está en `fotoelectrico-app`.
+//! Renderer visual basado en Macroquad, desacoplado de la UI egui y de la física.
 
 #![forbid(unsafe_code)]
 
+pub mod layers;
 pub mod renderer;
 pub mod scene;
+
+pub use renderer::Renderer;
+pub use scene::{RenderLayers, RenderQuality, RenderStats, SceneFrame, SceneObject, Viewport};

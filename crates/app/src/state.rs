@@ -1,9 +1,11 @@
-//! Estado y contrato de presentación de la interfaz.
+//! Estado de la aplicación y contrato con la capa física.
 //!
-//! Este módulo no calcula física. Los controles son entradas de UI y
-//! `PhysicsReadout` es el espacio para recibir resultados de la crate física.
+//! Este módulo solo guarda controles y lecturas para presentar. No contiene
+//! ecuaciones ni calcula valores físicos.
 
-/// Opciones de material para la lista gráfica. No contiene parámetros físicos.
+use fotoelectrico_engine::RenderStats;
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MaterialChoice {
     Potassium,
@@ -45,47 +47,223 @@ impl MaterialChoice {
             Self::Platinum => "Pt",
         }
     }
+
+    /// Función de trabajo en eV (valores estándar de literatura documentados
+    /// en `physics_adapter`; el equipo de física puede ajustarlos allí).
+    pub const fn work_function_ev(self) -> f64 {
+        match self {
+            Self::Potassium => 2.29,
+            Self::Sodium => 2.36,
+            Self::Calcium => 2.87,
+            Self::Zinc => 4.30,
+            Self::Copper => 4.70,
+            Self::Platinum => 5.65,
+        }
+    }
 }
 
-/// Controles que la capa gráfica expone para que la capa física los consuma.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabTab {
+    #[default]
+    Cell,
+    Chart,
+    Compare,
+    Log,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeChoice {
+    #[default]
+    Midnight,
+    Slate,
+    HighContrast,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PerformanceMode {
+    #[default]
+    Balanced,
+    Eco,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShortcutKey {
+    Space,
+    P,
+    R,
+    N,
+    D,
+}
+
+impl ShortcutKey {
+    pub const ALL: [Self; 5] = [Self::Space, Self::P, Self::R, Self::N, Self::D];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Space => "Espacio",
+            Self::P => "P",
+            Self::R => "R",
+            Self::N => "N",
+            Self::D => "D",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShortcutPreferences {
+    pub toggle_play: ShortcutKey,
+    pub reset_animation: ShortcutKey,
+    pub step_frame: ShortcutKey,
+    pub diagnostics: ShortcutKey,
+}
+
+impl Default for ShortcutPreferences {
+    fn default() -> Self {
+        Self {
+            toggle_play: ShortcutKey::Space,
+            reset_animation: ShortcutKey::R,
+            step_frame: ShortcutKey::N,
+            diagnostics: ShortcutKey::D,
+        }
+    }
+}
+
+/// Entradas seleccionadas por el usuario; son valores de interfaz, no un modelo.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LabControls {
+pub struct ExperimentControls {
     pub material: MaterialChoice,
+    pub comparison_material: MaterialChoice,
     pub wavelength_nm: f32,
     pub intensity_percent: f32,
     pub applied_voltage_v: f32,
-    pub animation_running: bool,
-    /// Se usa solo cuando todavía no llega un resultado físico de emisión.
-    pub demo_electrons: bool,
 }
 
-impl Default for LabControls {
+impl Default for ExperimentControls {
     fn default() -> Self {
         Self {
             material: MaterialChoice::Sodium,
+            comparison_material: MaterialChoice::Copper,
             wavelength_nm: 400.0,
             intensity_percent: 55.0,
             applied_voltage_v: 0.0,
-            animation_running: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayerVisibility {
+    pub photons: bool,
+    pub electrons: bool,
+    pub arrows: bool,
+    pub labels: bool,
+    pub trails: bool,
+    pub grid: bool,
+    pub ruler: bool,
+    pub electrode_texture: bool,
+    pub demo_electrons: bool,
+}
+
+impl Default for LayerVisibility {
+    fn default() -> Self {
+        Self {
+            photons: true,
+            electrons: true,
+            arrows: true,
+            labels: true,
+            trails: true,
+            grid: true,
+            ruler: false,
+            electrode_texture: true,
             demo_electrons: true,
         }
     }
 }
 
-/// Punto de una curva que la capa física puede entregar a la gráfica.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChartViewState {
+    pub zoom: f32,
+    pub pan: f32,
+    pub show_data_table: bool,
+}
+
+impl Default for ChartViewState {
+    fn default() -> Self {
+        Self {
+            zoom: 1.0,
+            pan: 0.0,
+            show_data_table: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LayoutPreset {
+    #[default]
+    Workbench,
+    Analysis,
+    Presentation,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiPreferences {
+    pub theme: ThemeChoice,
+    pub performance: PerformanceMode,
+    pub simple_mode: bool,
+    pub presentation_mode: bool,
+    pub layout_preset: LayoutPreset,
+    pub controls_on_left: bool,
+    pub controls_panel_open: bool,
+    pub readouts_panel_open: bool,
+    pub controls_panel_width: f32,
+    pub readouts_panel_width: f32,
+    pub show_hitboxes: bool,
+    pub font_scale: f32,
+    pub zoom: f32,
+    pub layers: LayerVisibility,
+    pub shortcuts: ShortcutPreferences,
+}
+
+impl Default for UiPreferences {
+    fn default() -> Self {
+        Self {
+            theme: ThemeChoice::Midnight,
+            performance: PerformanceMode::Balanced,
+            simple_mode: false,
+            presentation_mode: false,
+            layout_preset: LayoutPreset::Workbench,
+            controls_on_left: true,
+            controls_panel_open: true,
+            readouts_panel_open: true,
+            controls_panel_width: 286.0,
+            readouts_panel_width: 282.0,
+            show_hitboxes: true,
+            font_scale: 1.0,
+            zoom: 1.0,
+            layers: LayerVisibility::default(),
+            shortcuts: ShortcutPreferences::default(),
+        }
+    }
+}
+
+/// Punto que la capa física puede entregar a la gráfica.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct CurvePoint {
     pub wavelength_nm: f64,
     pub max_kinetic_energy_ev: f64,
 }
 
-/// Datos calculados que la UI presenta, pero no obtiene por sí misma.
-///
-/// Al integrar la física, el adaptador de aplicación llena estos campos con
-/// los resultados del modelo. `None` significa que aún no se conectaron.
+/// Datos que la UI muestra, calculados por `fotoelectrico-physics`.
+/// `None` solo aparece antes del primer `refresh_physics`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PhysicsReadout {
     pub emission_possible: Option<bool>,
+    pub collected_possible: Option<bool>,
     pub frequency_hz: Option<f64>,
     pub photon_energy_ev: Option<f64>,
     pub work_function_ev: Option<f64>,
@@ -94,5 +272,407 @@ pub struct PhysicsReadout {
     pub max_kinetic_energy_ev: Option<f64>,
     pub stopping_potential_v: Option<f64>,
     pub photon_flux_density_per_m2_s: Option<f64>,
+    pub electron_max_speed_m_s: Option<f64>,
     pub kinetic_energy_curve: Vec<CurvePoint>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectedObject {
+    Canvas,
+    PhotonBeam,
+    Cathode,
+    Anode,
+    ElectronLayer,
+    FieldArrows,
+}
+
+impl InspectedObject {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Canvas => "Canvas de la celda",
+            Self::PhotonBeam => "Haz de fotones",
+            Self::Cathode => "Cátodo",
+            Self::Anode => "Ánodo",
+            Self::ElectronLayer => "Capa de electrones",
+            Self::FieldArrows => "Flechas de polaridad",
+        }
+    }
+
+    pub const fn screen_hint(self) -> &'static str {
+        match self {
+            Self::Canvas => "área completa de la celda",
+            Self::PhotonBeam => "haz visible a la izquierda de los electrodos",
+            Self::Cathode => "placa izquierda del canvas",
+            Self::Anode => "placa derecha del canvas",
+            Self::ElectronLayer => "espacio entre electrodos",
+            Self::FieldArrows => "centro del espacio entre electrodos",
+        }
+    }
+
+    /// Punto de anclaje normalizado para centrar el objeto en la vista.
+    pub const fn anchor_fraction(self) -> (f32, f32) {
+        match self {
+            Self::Canvas => (0.5, 0.5),
+            Self::PhotonBeam => (0.18, 0.53),
+            Self::Cathode => (0.33, 0.53),
+            Self::Anode => (0.71, 0.53),
+            Self::ElectronLayer | Self::FieldArrows => (0.52, 0.53),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SceneCamera {
+    pub zoom: f32,
+    pub target_zoom: f32,
+    pub pan_x: f32,
+    pub pan_y: f32,
+    pub target_pan_x: f32,
+    pub target_pan_y: f32,
+}
+
+impl Default for SceneCamera {
+    fn default() -> Self {
+        Self {
+            zoom: 1.0,
+            target_zoom: 1.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+            target_pan_x: 0.0,
+            target_pan_y: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockPanel {
+    Controls,
+    Readouts,
+}
+
+impl From<InspectedObject> for fotoelectrico_engine::SceneObject {
+    fn from(object: InspectedObject) -> Self {
+        match object {
+            InspectedObject::Canvas => Self::Canvas,
+            InspectedObject::PhotonBeam => Self::PhotonBeam,
+            InspectedObject::Cathode => Self::Cathode,
+            InspectedObject::Anode => Self::Anode,
+            InspectedObject::ElectronLayer => Self::ElectronLayer,
+            InspectedObject::FieldArrows => Self::FieldArrows,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HistoryEntry {
+    pub elapsed_seconds: f64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AppState {
+    pub controls: ExperimentControls,
+    pub readout: PhysicsReadout,
+    pub comparison_readout: PhysicsReadout,
+    pub chart: ChartViewState,
+    pub preferences: UiPreferences,
+    pub active_tab: LabTab,
+    pub animation_running: bool,
+    pub animation_speed: f32,
+    pub animation_time_seconds: f64,
+    pub session_seconds: f64,
+    pub show_preferences: bool,
+    pub show_shortcuts: bool,
+    pub show_command_palette: bool,
+    pub command_search: String,
+    pub show_diagnostics: bool,
+    pub inspector: Option<InspectedObject>,
+    inspector_anchor_fraction: Option<(f32, f32)>,
+    pub scene_camera: SceneCamera,
+    pub active_drawer: Option<DockPanel>,
+    pub notes: String,
+    pub render_stats: RenderStats,
+    pub history: Vec<HistoryEntry>,
+    pub undo_stack: Vec<ExperimentControls>,
+    pub redo_stack: Vec<ExperimentControls>,
+    last_undo_group: Option<(String, f64)>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        let mut state = Self {
+            controls: ExperimentControls::default(),
+            readout: PhysicsReadout::default(),
+            comparison_readout: PhysicsReadout::default(),
+            chart: ChartViewState::default(),
+            preferences: UiPreferences::default(),
+            active_tab: LabTab::Cell,
+            animation_running: true,
+            animation_speed: 1.0,
+            animation_time_seconds: 0.0,
+            session_seconds: 0.0,
+            show_preferences: false,
+            show_shortcuts: false,
+            show_command_palette: false,
+            command_search: String::new(),
+            show_diagnostics: false,
+            inspector: None,
+            inspector_anchor_fraction: None,
+            scene_camera: SceneCamera::default(),
+            active_drawer: None,
+            notes: String::new(),
+            render_stats: RenderStats::default(),
+            history: vec![HistoryEntry {
+                elapsed_seconds: 0.0,
+                text: "Sesión iniciada · motor físico conectado (modelo ideal)".to_owned(),
+            }],
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            last_undo_group: None,
+        };
+        crate::physics_adapter::refresh_state(&mut state);
+        state
+    }
+}
+
+impl AppState {
+    pub fn tick(&mut self, delta_seconds: f64) {
+        let delta = delta_seconds.clamp(0.0, 0.1);
+        self.session_seconds += delta;
+        if self.animation_running {
+            self.animation_time_seconds += delta * self.animation_speed.clamp(0.1, 3.0) as f64;
+        }
+        let ease = 1.0 - (-8.0 * delta as f32).exp();
+        self.scene_camera.zoom += (self.scene_camera.target_zoom - self.scene_camera.zoom) * ease;
+        self.scene_camera.pan_x +=
+            (self.scene_camera.target_pan_x - self.scene_camera.pan_x) * ease;
+        self.scene_camera.pan_y +=
+            (self.scene_camera.target_pan_y - self.scene_camera.pan_y) * ease;
+        if (self.scene_camera.target_zoom - self.scene_camera.zoom).abs() < 0.001 {
+            self.scene_camera.zoom = self.scene_camera.target_zoom;
+        }
+        if (self.scene_camera.target_pan_x - self.scene_camera.pan_x).abs() < 0.001 {
+            self.scene_camera.pan_x = self.scene_camera.target_pan_x;
+        }
+        if (self.scene_camera.target_pan_y - self.scene_camera.pan_y).abs() < 0.001 {
+            self.scene_camera.pan_y = self.scene_camera.target_pan_y;
+        }
+    }
+
+    pub fn select_object(&mut self, object: InspectedObject) {
+        self.select_object_at(object, object.anchor_fraction());
+    }
+
+    /// Selecciona un objeto usando su posición real en la escena como foco de cámara.
+    pub fn select_object_at(&mut self, object: InspectedObject, anchor_fraction: (f32, f32)) {
+        let changed = self.inspector != Some(object);
+        self.inspector = Some(object);
+        self.inspector_anchor_fraction = Some((
+            anchor_fraction.0.clamp(0.0, 1.0),
+            anchor_fraction.1.clamp(0.0, 1.0),
+        ));
+        if !self.preferences.readouts_panel_open {
+            self.active_drawer = Some(DockPanel::Readouts);
+        }
+        self.sync_camera_target();
+        if changed {
+            self.push_history(format!("Inspector seleccionado: {}", object.label()));
+        }
+    }
+
+    /// El inspector solo se cierra si el usuario oculta su capa.
+    /// Los cambios físicos (sin emisión, bloqueo por frenado) jamás cierran
+    /// el inspector: el panel explica el porqué en vez de "desconectar".
+    pub fn reconcile_inspector_visibility(&mut self) {
+        let is_visible = match self.inspector {
+            Some(InspectedObject::Canvas | InspectedObject::Cathode | InspectedObject::Anode) => {
+                true
+            }
+            Some(InspectedObject::PhotonBeam) => self.preferences.layers.photons,
+            Some(InspectedObject::ElectronLayer) => self.preferences.layers.electrons,
+            Some(InspectedObject::FieldArrows) => self.preferences.layers.arrows,
+            None => true,
+        };
+        if !is_visible {
+            self.close_inspector();
+        }
+    }
+
+    pub fn sync_camera_target(&mut self) {
+        let zoom = match self.inspector {
+            Some(InspectedObject::Canvas) => 1.0,
+            Some(_) => self.preferences.zoom.clamp(0.7, 1.8).max(1.25),
+            None => self.preferences.zoom.clamp(0.7, 1.8),
+        };
+        self.scene_camera.target_zoom = zoom;
+        if let Some(object) = self
+            .inspector
+            .filter(|object| *object != InspectedObject::Canvas)
+        {
+            let (anchor_x, anchor_y) = self
+                .inspector_anchor_fraction
+                .unwrap_or_else(|| object.anchor_fraction());
+            self.scene_camera.target_pan_x = -(anchor_x - 0.5) * zoom;
+            self.scene_camera.target_pan_y = -(anchor_y - 0.5) * zoom;
+        } else {
+            self.scene_camera.target_pan_x = 0.0;
+            self.scene_camera.target_pan_y = 0.0;
+        }
+    }
+
+    pub fn close_inspector(&mut self) {
+        if self.inspector.take().is_some() {
+            self.inspector_anchor_fraction = None;
+            self.sync_camera_target();
+            self.push_history("Inspector cerrado · vista general restaurada");
+        }
+    }
+
+    pub fn set_layout_preset(&mut self, preset: LayoutPreset) {
+        self.preferences.layout_preset = preset;
+        match preset {
+            LayoutPreset::Workbench => {
+                self.preferences.controls_panel_open = true;
+                self.preferences.readouts_panel_open = true;
+                self.preferences.presentation_mode = false;
+                self.active_tab = LabTab::Cell;
+            }
+            LayoutPreset::Analysis => {
+                self.preferences.controls_panel_open = false;
+                self.preferences.readouts_panel_open = true;
+                self.preferences.presentation_mode = false;
+                self.active_tab = LabTab::Chart;
+            }
+            LayoutPreset::Presentation => {
+                self.preferences.controls_panel_open = false;
+                self.preferences.readouts_panel_open = false;
+                self.preferences.presentation_mode = true;
+                self.active_tab = LabTab::Cell;
+            }
+        }
+        self.active_drawer = None;
+        self.push_history(format!("Diseño aplicado: {preset:?}"));
+    }
+
+    pub fn reset_animation(&mut self) {
+        self.animation_time_seconds = 0.0;
+        self.push_history("Animación reiniciada");
+    }
+
+    pub fn step_frame(&mut self) {
+        self.animation_time_seconds += 1.0 / 30.0;
+    }
+
+    pub fn record_control_change(&mut self, before: ExperimentControls) {
+        let after = self.controls;
+        if before == after {
+            return;
+        }
+        let text = control_diff(before, after);
+        let group_key = text
+            .split_once(" ->")
+            .map(|(key, _)| key.to_owned())
+            .unwrap_or_else(|| text.clone());
+        let new_undo_group = self
+            .last_undo_group
+            .as_ref()
+            .map(|(label, time)| label != &group_key || self.session_seconds - time > 0.45)
+            .unwrap_or(true);
+        if new_undo_group {
+            self.undo_stack.push(before);
+            if self.undo_stack.len() > 60 {
+                self.undo_stack.remove(0);
+            }
+        }
+        self.redo_stack.clear();
+        self.last_undo_group = Some((group_key.clone(), self.session_seconds));
+        if let Some(last) = self.history.last_mut() {
+            let last_group_key = last.text.split_once(" ->").map(|(key, _)| key.to_owned());
+            if last_group_key.as_deref() == Some(group_key.as_str())
+                && self.session_seconds - last.elapsed_seconds < 0.45
+            {
+                last.elapsed_seconds = self.session_seconds;
+                last.text = text;
+                return;
+            }
+        }
+        self.push_history(text);
+    }
+
+    pub fn undo(&mut self) {
+        if let Some(previous) = self.undo_stack.pop() {
+            self.redo_stack.push(self.controls);
+            self.controls = previous;
+            self.last_undo_group = None;
+            self.push_history("Deshacer cambio de controles");
+            self.refresh_physics();
+        }
+    }
+
+    pub fn redo(&mut self) {
+        if let Some(next) = self.redo_stack.pop() {
+            self.undo_stack.push(self.controls);
+            self.controls = next;
+            self.last_undo_group = None;
+            self.push_history("Rehacer cambio de controles");
+            self.refresh_physics();
+        }
+    }
+
+    pub fn reset_controls(&mut self) {
+        let before = self.controls;
+        self.controls = ExperimentControls::default();
+        self.record_control_change(before);
+    }
+
+    /// Recalcula las lecturas con el motor físico. Llamar tras cambiar
+    /// controles y una vez por frame en el loop principal.
+    pub fn refresh_physics(&mut self) {
+        crate::physics_adapter::refresh_state(self);
+        self.reconcile_inspector_visibility();
+    }
+
+    pub fn push_history(&mut self, text: impl Into<String>) {
+        self.history.push(HistoryEntry {
+            elapsed_seconds: self.session_seconds,
+            text: text.into(),
+        });
+        if self.history.len() > 120 {
+            self.history.remove(0);
+        }
+    }
+}
+
+/// ¿Deben verse electrones en la escena? Emisión + colección por voltaje
+/// + intensidad. Si aún no hay lectura, usa la demo.
+pub fn electrons_visible_in_scene(state: &AppState) -> bool {
+    if let Some(collected) = state.readout.collected_possible {
+        if !collected {
+            return false;
+        }
+        return state.controls.intensity_percent > 0.1;
+    }
+    if let Some(emission) = state.readout.emission_possible {
+        return emission && state.controls.intensity_percent > 0.1;
+    }
+    state.preferences.layers.demo_electrons
+}
+
+fn control_diff(before: ExperimentControls, after: ExperimentControls) -> String {
+    if before.material != after.material {
+        format!("Material del cátodo -> {}", after.material.name())
+    } else if before.comparison_material != after.comparison_material {
+        format!(
+            "Material de comparación -> {}",
+            after.comparison_material.name()
+        )
+    } else if (before.wavelength_nm - after.wavelength_nm).abs() > 0.01 {
+        format!("Longitud de onda -> {:.0} nm", after.wavelength_nm)
+    } else if (before.intensity_percent - after.intensity_percent).abs() > 0.01 {
+        format!("Intensidad -> {:.0}%", after.intensity_percent)
+    } else if (before.applied_voltage_v - after.applied_voltage_v).abs() > 0.01 {
+        format!("Voltaje aplicado -> {:+.1} V", after.applied_voltage_v)
+    } else {
+        "Controles actualizados".to_owned()
+    }
 }
