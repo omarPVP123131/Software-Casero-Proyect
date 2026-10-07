@@ -5,10 +5,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::{AppState, ExperimentPoint, LabTab, UiPreferences};
+use crate::state::{AppState, ExperimentPoint, LabTab, SavedFit, UiPreferences};
 
-/// Subconjunto serializable del experimento: puntos, modo y semilla.
-/// El estado efímero (mensajes, última ruta) no se guarda.
+/// Subconjunto serializable del experimento: puntos, modo, semilla y ajustes.
+/// El estado efímero (mensajes, última ruta, selección, zoom) no se guarda.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 struct PersistedExperiment {
@@ -16,6 +16,7 @@ struct PersistedExperiment {
     experimental_mode: bool,
     noise_percent: f32,
     next_seed: u64,
+    saved_fits: Vec<SavedFit>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +51,7 @@ fn snapshot_of(state: &AppState) -> PersistedUi {
             experimental_mode: state.experiment.experimental_mode,
             noise_percent: state.experiment.noise_percent,
             next_seed: state.experiment.next_seed,
+            saved_fits: state.experiment.saved_fits.clone(),
         },
         notes: state.notes.clone(),
     }
@@ -89,6 +91,7 @@ impl UiPersistence {
         state.experiment.experimental_mode = snapshot.experiment.experimental_mode;
         state.experiment.noise_percent = snapshot.experiment.noise_percent;
         state.experiment.next_seed = snapshot.experiment.next_seed;
+        state.experiment.saved_fits = snapshot.experiment.saved_fits;
         state.notes = snapshot.notes;
         state.scene_camera.zoom = state.preferences.zoom;
         state.scene_camera.target_zoom = state.preferences.zoom;
@@ -207,6 +210,7 @@ mod tests {
                 experimental_mode: true,
                 noise_percent: 2.0,
                 next_seed: 42,
+                saved_fits: Vec::new(),
             },
             notes: "observar el umbral".to_owned(),
             ..PersistedUi::default()

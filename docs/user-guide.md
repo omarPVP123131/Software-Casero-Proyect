@@ -14,7 +14,7 @@
 
 - **Celda.** Barra espectral, toolbar de animación y canvas. Clic en haz, cátodo, ánodo, electrones o flechas para inspeccionar; el inspector se cierra si ocultas su capa.
 - **Gráfica.** Curva `Kmax(λ)` del material actual con línea de umbral `λ₀`. Zoom con rueda, desplazamiento por arrastre, valores con cursor y tabla opcional.
-- **Experimento.** Mide `V₀` a varias frecuencias: elige modo ideal o experimental (±ruido), captura el punto actual, ve la tabla, el ajuste `V₀ = m·f + b` (pendiente, `h = e·m`, error %, R²), la gráfica con recta, la curva I–V y exporta CSV.
+- **Experimento.** Mide `V₀` a varias frecuencias: elige modo ideal o experimental (±ruido), captura el punto actual o lanza un barrido automático, ve la tabla (clic ○/● o en la gráfica para resaltar), el ajuste `V₀ = m·f + b` (pendiente, `h = e·m`, error %, R²), la gráfica con recta, barras de error, zoom y paneo, la curva I–V y exporta CSV. Guarda ajustes por material para comparar pendientes; la tabla sobrevive al cierre.
 - **Comparar.** Principal frente a comparación: emisión, colección, `Φ`, `f₀`, `Kmax`, `V₀` y tamaño de curva.
 - **Registro.** Historial de cambios con tiempo de sesión y notas del operador (no afectan la física), más exportación de la sesión completa a CSV. Las notas y la tabla del experimento se guardan al cerrar y se restauran al abrir.
 

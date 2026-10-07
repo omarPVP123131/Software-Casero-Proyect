@@ -171,6 +171,54 @@ pub fn noisy_stopping_v(ideal_v: f64, noise_percent: f32, seed: &mut u64) -> f64
     (ideal_v * (1.0 + (u * 2.0 - 1.0) * noise)).max(0.0)
 }
 
+/// Punto candidato del barrido automático: (λ nm, f Hz, V0 ideal, V0 medido).
+pub struct SweepCandidate {
+    pub wavelength_nm: f32,
+    pub frequency_hz: f64,
+    pub stopping_ideal_v: f64,
+    pub stopping_measured_v: f64,
+}
+
+/// Barrido automático de `n` puntos barriendo λ en la zona con emisión.
+///
+/// Reparte `n` longitudes de onda uniformes entre 200 nm y 10 nm por debajo
+/// del umbral del material (siempre con emisión). Aplica el ruido pedido a
+/// cada punto con la semilla dada. Devuelve vacío si el material no emite
+/// en ese rango. No toca los controles: la UI decide qué agregar.
+pub fn auto_sweep_points(
+    material: MaterialChoice,
+    n: usize,
+    noise_percent: f32,
+    seed: &mut u64,
+) -> Vec<SweepCandidate> {
+    let physics_material = material_for(material);
+    let lambda0_nm = constants::meters_to_nm(physics_material.threshold_wavelength_m());
+    let hi = (lambda0_nm - 10.0).clamp(200.0, 890.0);
+    let lo = 200.0_f64;
+    if hi - lo <= 1.0 || n < 2 {
+        return Vec::new();
+    }
+    let n = n.min(12);
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let lambda = lo + (hi - lo) * i as f64 / (n - 1) as f64;
+        let result = fotoelectrico_physics::photon::calculate_effect(&physics_material, lambda);
+        if !result.emits_electron {
+            continue;
+        }
+        let freq = constants::SPEED_OF_LIGHT_C / constants::nm_to_meters(lambda);
+        // V0 = Kmax_J / e (directo en SI).
+        let ideal_v = result.k_max_j / constants::ELEMENTARY_CHARGE_E;
+        out.push(SweepCandidate {
+            wavelength_nm: lambda as f32,
+            frequency_hz: freq,
+            stopping_ideal_v: ideal_v,
+            stopping_measured_v: noisy_stopping_v(ideal_v, noise_percent, seed),
+        });
+    }
+    out
+}
+
 fn frequency_hz_for(wavelength_nm: f64) -> f64 {
     let clean = if wavelength_nm.is_finite() {
         wavelength_nm.max(1.0)
@@ -565,5 +613,32 @@ mod tests {
         assert!(csv.starts_with("n,material,"));
         assert!(csv.contains("frequency_hz"));
         assert!(csv.contains("stopping_measured_v"));
+    }
+
+    #[test]
+    fn auto_sweep_covers_emitting_range_with_ideal_values() {
+        // Sodio: λ0 ≈ 525 nm → barrido 200..515 nm, todo con emisión.
+        let mut seed = 7u64;
+        let points = auto_sweep_points(MaterialChoice::Sodium, 6, 0.0, &mut seed);
+        assert_eq!(points.len(), 6);
+        assert!((points[0].wavelength_nm - 200.0).abs() < 0.01);
+        assert!(points
+            .windows(2)
+            .all(|w| w[0].wavelength_nm < w[1].wavelength_nm));
+        for p in &points {
+            assert!(p.frequency_hz > 0.0);
+            assert!(p.stopping_ideal_v > 0.0);
+            assert_eq!(p.stopping_measured_v, p.stopping_ideal_v, "ruido 0 → ideal");
+        }
+        // Con ruido, el medido difiere pero sigue ≥ 0 y acotado.
+        let mut seed = 7u64;
+        let noisy = auto_sweep_points(MaterialChoice::Sodium, 6, 5.0, &mut seed);
+        assert_eq!(noisy.len(), 6);
+        for (ideal, meas) in points.iter().zip(noisy.iter()) {
+            assert!(
+                (meas.stopping_measured_v - ideal.stopping_ideal_v).abs()
+                    <= 0.05 * ideal.stopping_ideal_v + 1e-12
+            );
+        }
     }
 }

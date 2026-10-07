@@ -53,6 +53,7 @@ Definidos en `crates/app/src/physics_adapter.rs`:
 - **Llegada estocástica (solo visual).** El conteo de electrones fluctúa ±1 dos veces por segundo y cada partícula lleva un desfase propio, determinista en (tiempo, λ). El valor medio (corriente, Kmax) no fluctúa.
 - **Ruido experimental.** Modo experimental: `V₀` medido = ideal × (1 ± ruido) con ruido uniforme determinista (splitmix64, generado una vez por punto). El modo ideal verifica el modelo (R² ≈ 1); el experimental lo mide con dispersión.
 - **Ajuste.** Regresión `V₀ = m·f + b` con `h = e·m`, error % vs teórica y `R² = 1 − SS_res/SS_tot`.
+- **Barrido automático.** Reparte N puntos uniformes entre 200 nm y 10 nm bajo el umbral (siempre con emisión); aplica el ruido del modo a cada punto.
 - **Curva.** `Kmax(λ)` con 61 puntos uniformes entre 180 y 900 nm, evaluando `calculate_effect` por punto.
 - **Animación.** Escala visual de velocidad `√(Kmax / 1 eV)` entre 0.5 y 2.2; cantidad de electrones por intensidad y colección. Es visualización, no integración de trayectorias.
 

@@ -8,6 +8,7 @@ Estado real a octubre de 2026. Solo se marca hecho lo que compila, pasa pruebas 
 - **v0.2 Interfaz conectada.** Controles (material, `λ`, intensidad, `V`), lecturas en vivo, curva `Kmax(λ)` y comparación con el mismo punto de operación.
 - **v0.3 Experimento.** Pestaña Experimento: tabla `(f, V₀)` con validación (emisión, duplicados, un material), modos ideal/experimental con ruido determinista ±%, ajuste visible (m, b, h estimada, error %, R²), gráfica V₀–f con recta y barras de error, curva I–V, fotocorriente calibrable, exportación CSV del experimento y de la sesión (archivo + portapapeles). Tabla y notas persistentes.
 - **v0.4 Visualización.** Celda, haz por intensidad, electrones con llegada estocástica (Poisson visual determinista) y velocidad `∝ √Kmax`, flechas por voltaje, inspector por forma, escenarios de demo y HUD.
+- **v0.5 Producción.** Estilo editorial plano sin tarjetas (tablas con números tabulares, fórmulas monoespaciadas), gráfica V0–f interactiva (zoom, paneo, selección gráfica↔tabla), barrido automático, ajustes guardados por material, fotocorriente calibrable, tabla/notas persistentes y protocolo de demo.
 
 ## Pendiente
 

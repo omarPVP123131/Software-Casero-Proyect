@@ -366,6 +366,19 @@ pub struct ExperimentPoint {
     pub noise_percent: f32,
 }
 
+/// Ajuste guardado para comparar pendientes entre materiales.
+/// La pendiente (y por tanto h) no debe depender del material.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SavedFit {
+    pub material_name: String,
+    pub n_points: usize,
+    pub slope: f64,
+    pub intercept: f64,
+    pub h_experimental: f64,
+    pub error_percentage: f64,
+    pub r_squared: f64,
+}
+
 /// Estado del experimento V0 contra f y su configuración.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentState {
@@ -379,6 +392,15 @@ pub struct ExperimentState {
     pub status: String,
     /// Última ruta de exportación (para confirmar al usuario).
     pub last_export_path: String,
+    /// Punto seleccionado (gráfica ↔ tabla). Transitorio, no se persiste.
+    pub selected: Option<usize>,
+    /// Zoom y paneo de la gráfica V0–f. Transitorios, no se persisten.
+    pub fit_zoom: f32,
+    pub fit_pan: f32,
+    /// Número de puntos del barrido automático.
+    pub sweep_count: usize,
+    /// Ajustes guardados por material para comparar pendientes.
+    pub saved_fits: Vec<SavedFit>,
 }
 
 impl Default for ExperimentState {
@@ -390,6 +412,11 @@ impl Default for ExperimentState {
             next_seed: 0x9E37_79B9_7F4A_7C15,
             status: String::new(),
             last_export_path: String::new(),
+            selected: None,
+            fit_zoom: 1.0,
+            fit_pan: 0.0,
+            sweep_count: 6,
+            saved_fits: Vec::new(),
         }
     }
 }
@@ -463,12 +490,34 @@ impl ExperimentState {
         if index < self.points.len() {
             self.points.remove(index);
             self.status = format!("Punto quitado. Quedan {}.", self.points.len());
+            // El índice seleccionado puede haber quedado inválido.
+            if self.selected.is_some_and(|s| s >= self.points.len()) {
+                self.selected = None;
+            }
         }
     }
 
     pub fn clear(&mut self) {
         self.points.clear();
+        self.selected = None;
         self.status = "Tabla del experimento vaciada.".to_owned();
+    }
+
+    /// Guarda el ajuste actual (reemplaza el del mismo material).
+    pub fn save_fit(&mut self, fit: SavedFit) {
+        if let Some(slot) = self
+            .saved_fits
+            .iter_mut()
+            .find(|saved| saved.material_name == fit.material_name)
+        {
+            *slot = fit;
+        } else {
+            if self.saved_fits.len() >= 6 {
+                self.saved_fits.remove(0);
+            }
+            self.saved_fits.push(fit);
+        }
+        self.status = "Ajuste guardado para comparar materiales.".to_owned();
     }
 }
 

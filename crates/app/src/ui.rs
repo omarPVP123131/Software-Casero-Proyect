@@ -16,7 +16,8 @@ use fotoelectrico_engine::{RenderQuality, Viewport};
 
 use crate::physics_adapter::photoelectron_strength;
 use crate::physics_adapter::{
-    experiment_csv, noisy_stopping_v, photocurrent_a, save_text_file, session_csv,
+    auto_sweep_points, experiment_csv, noisy_stopping_v, photocurrent_a, save_text_file,
+    session_csv,
 };
 use crate::state::{
     electrons_visible_in_scene, AppState, InspectedObject, LabTab, MaterialChoice, PerformanceMode,
@@ -943,11 +944,9 @@ fn draw_readout_panel(ui: &mut egui::Ui, state: &mut AppState, palette: Palette)
     });
 }
 
-/// Tarjeta de lectura en 3 líneas verticales que nunca se solapan:
-/// etiqueta (arriba, tenue) → valor (medio, fuerte) → fórmula (abajo, tenue).
-/// Cada línea ocupa todo el ancho disponible y hace wrap por separado, así
-/// que funciona en paneles de 220–390 px sin importar lo largo del valor.
-/// El tooltip muestra la explicación + la fuente LaTeX para copiar.
+/// Fila de lectura plana: etiqueta tenue, valor fuerte monoespaciado y
+/// fórmula tenue debajo. Sin cajas: las líneas no pueden solaparse porque
+/// cada una ocupa todo el ancho. El hover del valor muestra LaTeX.
 fn metric_row(
     ui: &mut egui::Ui,
     label: &str,
@@ -957,31 +956,22 @@ fn metric_row(
     formula: math::Formula,
     palette: Palette,
 ) {
-    egui::Frame::new()
-        .fill(palette.raised)
-        .stroke(Stroke::new(0.7_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(8))
-        .inner_margin(egui::Margin::symmetric(9, 7))
-        .show(ui, |ui| {
-            ui.vertical(|ui| {
-                ui.label(RichText::new(label).small().color(palette.muted));
-                ui.label(
-                    RichText::new(value.unwrap_or_else(|| "—".to_owned()))
-                        .size(15.0)
-                        .strong()
-                        .color(color),
-                );
-                ui.label(
-                    RichText::new(formula.rendered)
-                        .small()
-                        .monospace()
-                        .color(palette.muted),
-                );
-            });
-        })
-        .response
-        .on_hover_text(format!("{hint}\nLaTeX: {}", formula.latex));
-    ui.add_space(5.0);
+    ui.label(RichText::new(label).small().color(palette.muted));
+    ui.label(
+        RichText::new(value.unwrap_or_else(|| "—".to_owned()))
+            .size(15.0)
+            .strong()
+            .monospace()
+            .color(color),
+    )
+    .on_hover_text(format!("{hint}\nLaTeX: {}", formula.latex));
+    ui.label(
+        RichText::new(formula.rendered)
+            .small()
+            .monospace()
+            .color(palette.muted),
+    );
+    ui.add_space(3.0);
 }
 
 fn draw_tabs(ui: &mut egui::Ui, state: &mut AppState, palette: Palette) {
@@ -1659,6 +1649,60 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             );
         }
     });
+    ui.add_space(2.0);
+    // Barrido automático: N puntos barriendo λ sin tocar tus controles.
+    ui.horizontal_wrapped(|ui| {
+        ui.add(egui::Slider::new(&mut state.experiment.sweep_count, 3..=12).text("puntos"));
+        if ui
+            .button("Barrido automático")
+            .on_hover_text("Captura N puntos barriendo λ en la zona con emisión.")
+            .clicked()
+        {
+            let mat = state.controls.material;
+            let conflict = state
+                .experiment
+                .points
+                .first()
+                .is_some_and(|p| p.material_name != mat.name());
+            if conflict {
+                state.experiment.status = "Vacía la tabla: es de otro material.".to_owned();
+            } else {
+                let noise = if state.experiment.experimental_mode {
+                    state.experiment.noise_percent
+                } else {
+                    0.0
+                };
+                let n = state.experiment.sweep_count;
+                let candidates = auto_sweep_points(mat, n, noise, &mut state.experiment.next_seed);
+                if candidates.is_empty() {
+                    state.experiment.status =
+                        "El material no emite en el rango de barrido.".to_owned();
+                } else {
+                    let mut added = 0;
+                    for c in &candidates {
+                        if state
+                            .experiment
+                            .try_add(
+                                mat,
+                                c.wavelength_nm,
+                                c.frequency_hz,
+                                c.stopping_ideal_v,
+                                true,
+                                c.stopping_measured_v,
+                            )
+                            .is_ok()
+                        {
+                            added += 1;
+                        }
+                    }
+                    state.experiment.status =
+                        format!("Barrido: {added}/{} puntos agregados.", candidates.len());
+                    let msg = state.experiment.status.clone();
+                    state.push_history(msg);
+                }
+            }
+        }
+    });
 
     // ---- 3. Ajuste V0 = m·f + b ----
     let data: Vec<DataPoint> = state
@@ -1754,8 +1798,114 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
         }
     }
 
-    // ---- 4. Gráfica V0–f ----
-    draw_fit_plot(ui, &state.experiment.points, fit.as_ref(), palette);
+    // ---- 3b. Ajustes guardados por material ----
+    // La pendiente (y por tanto h) no debe depender del material: guárdalos
+    // y compáralos.
+    section_rule(ui, "Ajustes guardados", palette);
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .add_enabled(fit.is_some(), egui::Button::new("Guardar ajuste actual"))
+            .on_hover_text("Guarda m, h y R² de este material para comparar.")
+            .clicked()
+        {
+            if let Some(result) = fit.as_ref() {
+                let mat_name = state
+                    .experiment
+                    .points
+                    .first()
+                    .map(|p| p.material_name.clone())
+                    .unwrap_or_else(|| state.controls.material.name().to_owned());
+                state.experiment.save_fit(crate::state::SavedFit {
+                    material_name: mat_name,
+                    n_points: data.len(),
+                    slope: result.slope_m,
+                    intercept: result.intercept_b,
+                    h_experimental: result.h_experimental,
+                    error_percentage: result.error_percentage,
+                    r_squared: result.r_squared,
+                });
+                state.push_history("Ajuste guardado para comparar materiales");
+            }
+        }
+    });
+    if state.experiment.saved_fits.is_empty() {
+        ui.label(
+            RichText::new("Sin ajustes guardados: mide un material, guarda y cambia de material.")
+                .small()
+                .color(palette.muted),
+        );
+    } else {
+        let mut drop_fit: Option<usize> = None;
+        egui::Grid::new("saved-fits-table")
+            .striped(true)
+            .num_columns(6)
+            .show(ui, |ui| {
+                for header in ["mat", "m (V·s)", "h (J·s)", "err %", "R²", ""] {
+                    ui.label(RichText::new(header).strong().color(palette.text));
+                }
+                ui.end_row();
+                for (i, saved) in state.experiment.saved_fits.iter().enumerate() {
+                    ui.label(RichText::new(saved.material_name.clone()).color(palette.text));
+                    data_cell(
+                        ui,
+                        format::scientific(saved.slope, 2),
+                        palette.cyan,
+                        math::FIT_LINE.latex,
+                    );
+                    data_cell(
+                        ui,
+                        format::scientific(saved.h_experimental, 2),
+                        palette.green,
+                        math::PLANCK_FIT.latex,
+                    );
+                    data_cell(
+                        ui,
+                        format!("{:.2}", saved.error_percentage),
+                        palette.amber,
+                        math::PLANCK_FIT.latex,
+                    );
+                    data_cell(
+                        ui,
+                        format!("{:.4}", saved.r_squared),
+                        palette.violet,
+                        math::RSQUARED.latex,
+                    );
+                    if ui
+                        .small_button("✕")
+                        .on_hover_text("Quitar ajuste.")
+                        .clicked()
+                    {
+                        drop_fit = Some(i);
+                    }
+                    ui.end_row();
+                }
+            });
+        if let Some(i) = drop_fit {
+            if i < state.experiment.saved_fits.len() {
+                state.experiment.saved_fits.remove(i);
+            }
+        }
+    }
+
+    // ---- 4. Gráfica V0–f (zoom con rueda, paneo por arrastre, clic selecciona) ----
+    draw_fit_plot(ui, &mut state.experiment, fit.as_ref(), palette);
+    if let Some(i) = state.experiment.selected {
+        if let Some(p) = state.experiment.points.get(i) {
+            ui.label(
+                RichText::new(format!(
+                    "Punto {}: λ = {:.0} nm · f = {} · V0 med = {:.3} V ({})",
+                    i + 1,
+                    p.wavelength_nm,
+                    format::scientific(p.frequency_hz, 1),
+                    p.stopping_measured_v,
+                    p.material_name
+                ))
+                .small()
+                .monospace()
+                .color(palette.cyan),
+            );
+        }
+    }
     ui.add_space(8.0);
 
     // ---- 5. Tabla de puntos ----
@@ -1783,25 +1933,51 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
         );
     } else {
         let mut to_remove: Option<usize> = None;
+        let mut select: Option<Option<usize>> = None;
         egui::Grid::new("experiment-points-table")
             .striped(true)
-            .num_columns(6)
+            .num_columns(7)
             .show(ui, |ui| {
-                for header in ["n", "λ (nm)", "f (Hz)", "V0 med (V)", "mat", ""] {
+                for header in ["n", "λ (nm)", "f (Hz)", "V0 med (V)", "mat", "", ""] {
                     ui.label(RichText::new(header).strong().color(palette.text));
                 }
                 ui.end_row();
                 for (i, p) in state.experiment.points.iter().enumerate() {
+                    let row_color = if state.experiment.selected == Some(i) {
+                        palette.cyan
+                    } else {
+                        palette.text
+                    };
                     data_cell(ui, format!("{}", i + 1), palette.muted, "");
-                    data_cell(ui, format!("{:.0}", p.wavelength_nm), palette.text, "");
-                    data_cell(ui, format::scientific(p.frequency_hz, 1), palette.text, "");
+                    data_cell(ui, format!("{:.0}", p.wavelength_nm), row_color, "");
+                    data_cell(ui, format::scientific(p.frequency_hz, 1), row_color, "");
                     data_cell(
                         ui,
                         format!("{:.3}", p.stopping_measured_v),
-                        palette.amber,
+                        if state.experiment.selected == Some(i) {
+                            palette.cyan
+                        } else {
+                            palette.amber
+                        },
                         r"$V_0$ medido",
                     );
-                    ui.label(RichText::new(p.material_name.clone()).color(palette.text));
+                    ui.label(RichText::new(p.material_name.clone()).color(row_color));
+                    let mark = if state.experiment.selected == Some(i) {
+                        "●"
+                    } else {
+                        "○"
+                    };
+                    if ui
+                        .small_button(mark)
+                        .on_hover_text("Resaltar en la gráfica.")
+                        .clicked()
+                    {
+                        select = Some(if state.experiment.selected == Some(i) {
+                            None
+                        } else {
+                            Some(i)
+                        });
+                    }
                     if ui
                         .small_button("✕")
                         .on_hover_text("Quitar punto.")
@@ -1814,6 +1990,9 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             });
         if let Some(i) = to_remove {
             state.experiment.remove(i);
+        }
+        if let Some(sel) = select {
+            state.experiment.selected = sel;
         }
     }
 
@@ -1908,11 +2087,13 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
 
 fn draw_fit_plot(
     ui: &mut egui::Ui,
-    points: &[crate::state::ExperimentPoint],
+    experiment: &mut crate::state::ExperimentState,
     fit: Option<&fotoelectrico_physics::LinearFitResult>,
     palette: Palette,
 ) {
+    use crate::state::ExperimentPoint;
     section_rule(ui, "Gráfica V0 contra f", palette);
+    let points: &[ExperimentPoint] = &experiment.points;
     if points.len() < 2 {
         ui.label(
             RichText::new("Necesitas 2 puntos para ver la recta de ajuste.")
@@ -1922,8 +2103,21 @@ fn draw_fit_plot(
         return;
     }
     let desired = Vec2::new(ui.available_width().max(260.0), 240.0);
-    let (response, painter) = ui.allocate_painter(desired, Sense::hover());
+    let (response, painter) = ui.allocate_painter(desired, Sense::click_and_drag());
     let rect = response.rect;
+    // Zoom con rueda y paneo por arrastre (una línea de estado, sin cajas).
+    if response.hovered() {
+        let scroll = ui.input(|input| input.smooth_scroll_delta.y);
+        if scroll.abs() > 0.0 {
+            experiment.fit_zoom = (experiment.fit_zoom * (1.0 + scroll * 0.001)).clamp(1.0, 8.0);
+        }
+    }
+    if response.dragged() {
+        let dx = ui.input(|input| input.pointer.delta().x);
+        experiment.fit_pan = (experiment.fit_pan
+            - dx / rect.width().max(1.0) / experiment.fit_zoom.max(1.0))
+        .clamp(-1.0, 1.0);
+    }
     painter.rect_filled(rect, egui::CornerRadius::same(10), palette.background);
     let plot = Rect::from_min_max(
         Pos2::new(rect.left() + 56.0, rect.top() + 12.0),
@@ -1949,6 +2143,14 @@ fn draw_fit_plot(
     xmax += pad_x;
     ymin = (ymin - pad_y).max(0.0);
     ymax += pad_y;
+    // Vista con zoom/paneo sobre el rango base.
+    let span0 = (xmax - xmin).max(f64::EPSILON);
+    let zoom = experiment.fit_zoom.clamp(1.0, 8.0);
+    let pan = experiment.fit_pan.clamp(-1.0, 1.0);
+    let center = (xmin + xmax) * 0.5 + pan as f64 * span0;
+    let span = span0 / zoom as f64;
+    xmin = center - span * 0.5;
+    xmax = center + span * 0.5;
     let to_screen = |x: f64, y: f64| {
         Pos2::new(
             plot.left() + ((x - xmin) / (xmax - xmin)) as f32 * plot.width(),
@@ -2003,7 +2205,7 @@ fn draw_fit_plot(
             palette.green,
         );
     }
-    for p in points {
+    for (i, p) in points.iter().enumerate() {
         let center = to_screen(p.frequency_hz, p.stopping_measured_v);
         // Barra de error ±ruido: conecta la tabla con la recta.
         let half = p.stopping_measured_v * p.noise_percent as f64 / 100.0;
@@ -2018,8 +2220,48 @@ fn draw_fit_plot(
                 );
             }
         }
-        painter.circle_filled(center, 4.5, palette.amber);
+        let is_selected = experiment.selected == Some(i);
+        painter.circle_filled(center, if is_selected { 6.0 } else { 4.5 }, palette.amber);
+        if is_selected {
+            painter.circle_stroke(center, 9.0, Stroke::new(1.5_f32, palette.cyan));
+        }
     }
+    // Clic en un punto lo selecciona (y lo resalta en la tabla).
+    // Se calcula primero y se asigna después para no pelear préstamos.
+    let clicked_select: Option<Option<usize>> = if response.clicked() {
+        Some(match response.hover_pos() {
+            Some(pos) => {
+                let mut best: Option<(usize, f32)> = None;
+                for (i, p) in points.iter().enumerate() {
+                    let center = to_screen(p.frequency_hz, p.stopping_measured_v);
+                    let dist = ((pos.x - center.x).powi(2) + (pos.y - center.y).powi(2)).sqrt();
+                    if dist <= 14.0 && best.is_none_or(|(_, d)| dist < d) {
+                        best = Some((i, dist));
+                    }
+                }
+                best.map(|(i, _)| i)
+            }
+            None => None,
+        })
+    } else {
+        None
+    };
+    if let Some(select) = clicked_select {
+        experiment.selected = select;
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new("Rueda: zoom · arrastra: paneo · clic en punto: seleccionar")
+                .small()
+                .color(palette.muted),
+        );
+        if (experiment.fit_zoom != 1.0 || experiment.fit_pan != 0.0)
+            && ui.small_button("Restablecer vista").clicked()
+        {
+            experiment.fit_zoom = 1.0;
+            experiment.fit_pan = 0.0;
+        }
+    });
     response.on_hover_text("Puntos medidos (ámbar) con barra ±ruido y recta V0 = m·f + b (verde).");
 }
 
@@ -2147,93 +2389,85 @@ fn draw_comparison_card(
     title: &str,
     palette: Palette,
 ) {
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.label(RichText::new(title).size(9.0).strong().color(palette.muted));
-            ui.heading(
-                RichText::new(format!("{} ({})", material.name(), material.symbol()))
-                    .color(palette.text),
-            );
-            ui.add_space(8.0);
-            metric_row(
-                ui,
-                "Emisión",
-                readout
-                    .emission_possible
-                    .map(|v| if v { "Sí" } else { "No" }.to_owned()),
-                palette.green,
-                "Hay emisión si el fotón supera la función de trabajo.",
-                math::EMISSION_COND,
-                palette,
-            );
-            metric_row(
-                ui,
-                "Colección",
-                readout
-                    .collected_possible
-                    .map(|v| if v { "Sí" } else { "No" }.to_owned()),
-                palette.green,
-                "Bloqueada con voltaje de frenado.",
-                math::COLLECTION,
-                palette,
-            );
-            metric_row(
-                ui,
-                "Función de trabajo",
-                format::ev(readout.work_function_ev),
-                palette.violet,
-                "Energía mínima de extracción del material.",
-                math::WORK_FUNCTION,
-                palette,
-            );
-            metric_row(
-                ui,
-                "Frecuencia umbral",
-                format::hz(readout.threshold_frequency_hz),
-                palette.amber,
-                "Por debajo no hay emisión.",
-                math::THRESHOLD_FREQ,
-                palette,
-            );
-            metric_row(
-                ui,
-                "Kmax",
-                format::ev(readout.max_kinetic_energy_ev),
-                palette.cyan,
-                "Energía máxima del fotoelectrón.",
-                math::KMAX,
-                palette,
-            );
-            metric_row(
-                ui,
-                "V0",
-                format::volts(readout.stopping_potential_v),
-                palette.blue,
-                "Voltaje que frena al electrón más rápido.",
-                math::STOPPING,
-                palette,
-            );
-            if readout.kinetic_energy_curve.is_empty() {
-                ui.label(
-                    RichText::new("Curva calculándose…")
-                        .small()
-                        .color(palette.muted),
-                );
-            } else {
-                ui.label(
-                    RichText::new(format!(
-                        "{} puntos de curva calculados",
-                        readout.kinetic_energy_curve.len()
-                    ))
-                    .small()
-                    .color(palette.cyan),
-                );
-            }
-        });
+    ui.label(RichText::new(title).size(9.0).strong().color(palette.muted));
+    ui.heading(
+        RichText::new(format!("{} ({})", material.name(), material.symbol())).color(palette.text),
+    );
+    ui.separator();
+    metric_row(
+        ui,
+        "Emisión",
+        readout
+            .emission_possible
+            .map(|v| if v { "Sí" } else { "No" }.to_owned()),
+        palette.green,
+        "Hay emisión si el fotón supera la función de trabajo.",
+        math::EMISSION_COND,
+        palette,
+    );
+    metric_row(
+        ui,
+        "Colección",
+        readout
+            .collected_possible
+            .map(|v| if v { "Sí" } else { "No" }.to_owned()),
+        palette.green,
+        "Bloqueada con voltaje de frenado.",
+        math::COLLECTION,
+        palette,
+    );
+    metric_row(
+        ui,
+        "Función de trabajo",
+        format::ev(readout.work_function_ev),
+        palette.violet,
+        "Energía mínima de extracción del material.",
+        math::WORK_FUNCTION,
+        palette,
+    );
+    metric_row(
+        ui,
+        "Frecuencia umbral",
+        format::hz(readout.threshold_frequency_hz),
+        palette.amber,
+        "Por debajo no hay emisión.",
+        math::THRESHOLD_FREQ,
+        palette,
+    );
+    metric_row(
+        ui,
+        "Kmax",
+        format::ev(readout.max_kinetic_energy_ev),
+        palette.cyan,
+        "Energía máxima del fotoelectrón.",
+        math::KMAX,
+        palette,
+    );
+    metric_row(
+        ui,
+        "V0",
+        format::volts(readout.stopping_potential_v),
+        palette.blue,
+        "Voltaje que frena al electrón más rápido.",
+        math::STOPPING,
+        palette,
+    );
+    if readout.kinetic_energy_curve.is_empty() {
+        ui.label(
+            RichText::new("Curva calculándose…")
+                .small()
+                .color(palette.muted),
+        );
+    } else {
+        ui.label(
+            RichText::new(format!(
+                "{} puntos de curva calculados",
+                readout.kinetic_energy_curve.len()
+            ))
+            .small()
+            .color(palette.cyan),
+        );
+    }
 }
 
 fn draw_log_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette) {
