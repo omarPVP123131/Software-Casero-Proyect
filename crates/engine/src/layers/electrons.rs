@@ -66,8 +66,57 @@ pub fn electron_count(intensity_percent: f32, visible: bool, quality: RenderQual
     }
 }
 
-/// Posiciones de partículas. UI y renderer comparten este muestreo para que
-/// la selección coincida con lo dibujado.
+/// Semilla de la variabilidad visual derivada de λ: cada longitud de onda
+/// reordena el patrón de llegada. Determinista y compartida con la UI.
+pub fn arrival_seed(wavelength_nm: f32) -> u64 {
+    let bits = if wavelength_nm.is_finite() {
+        wavelength_nm.clamp(180.0, 900.0).to_bits() as u64
+    } else {
+        550.0_f32.to_bits() as u64
+    };
+    bits.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(0x8BAD_F00D_C0FF_EE00)
+}
+
+fn hash01(mut z: u64) -> f64 {
+    z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    // 53 bits de precisión en [0, 1).
+    ((z >> 11) as f64) / ((1u64 << 53) as f64)
+}
+
+/// Fluctuación del conteo: el número visible oscila ±1 alrededor de la media
+/// (Poisson visual). Cuantizada cada 0.5 s; con tiempo congelado no cambia.
+/// Garantía: base 0 siempre devuelve 0; el resultado nunca supera 12.
+pub fn stochastic_count(base: usize, time_seconds: f64, seed: u64) -> usize {
+    if base == 0 {
+        return 0;
+    }
+    let t = if time_seconds.is_finite() && time_seconds >= 0.0 {
+        time_seconds
+    } else {
+        0.0
+    };
+    let quantum = (t * 2.0).floor() as u64;
+    let noise = hash01(seed.wrapping_add(quantum.wrapping_mul(0xC2B2_AE3D_27D4_EB4F)));
+    let delta = ((noise * 3.0).floor() as i32) - 1; // -1, 0 o +1
+    (base as i32 + delta).clamp(0, 12) as usize
+}
+
+/// Desfase propio de cada partícula en ±0.06 de fase: rompe la rejilla
+/// perfectamente uniforme. Estático por (índice, semilla), sin saltos.
+pub fn phase_jitter(index: usize, seed: u64) -> f32 {
+    let h = hash01(seed ^ (index as u64).wrapping_mul(0x1656_67B1_9E37_79B9));
+    (h as f32 - 0.5) * 0.12
+}
+/// Posiciones de partículas con llegada estocástica (Poisson visual).
+///
+/// UI y renderer comparten este muestreo para que la selección coincida con
+/// lo dibujado: el conteo fluctúa ±1 dos veces por segundo y cada partícula
+/// lleva un desfase propio. Todo es determinista en `(tiempo, semilla)`;
+/// en pausa el tiempo se congela y la escena queda fija.
 #[allow(clippy::too_many_arguments)]
 pub fn visual_electrons(
     geometry: CellGeometry,
@@ -77,6 +126,7 @@ pub fn visual_electrons(
     quality: RenderQuality,
     speed_scale: f32,
     count: usize,
+    seed: u64,
 ) -> Vec<ElectronVisual> {
     let _ = quality;
     // Saneamiento total: geometría degenerada o tiempo inválido jamás rompen el frame.
@@ -87,7 +137,7 @@ pub fn visual_electrons(
     {
         return Vec::new();
     }
-    let count = count.min(12);
+    let count = stochastic_count(count.min(12), time_seconds, seed);
     if count == 0 {
         return Vec::new();
     }
@@ -109,7 +159,7 @@ pub fn visual_electrons(
     };
     (0..count)
         .map(|index| {
-            let offset = index as f32 * 0.23;
+            let offset = index as f32 * 0.23 + phase_jitter(index, seed);
             let effective_speed = anim * speed;
             let phase = if animation_running {
                 (time * effective_speed * 0.21 + offset).rem_euclid(1.0)
@@ -152,6 +202,7 @@ pub fn draw_electrons(frame: &SceneFrame<'_>, geometry: CellGeometry, color: Col
         frame.quality,
         speed,
         count,
+        arrival_seed(frame.wavelength_nm),
     );
     for particle in &particles {
         if frame.layers.trails && frame.quality == RenderQuality::Balanced {
@@ -197,6 +248,23 @@ mod tests {
     }
 
     #[test]
+    fn stochastic_arrival_is_deterministic_and_bounded() {
+        // Misma (base, tiempo, semilla) → mismo resultado, siempre.
+        let a = stochastic_count(5, 12.3, 99);
+        let b = stochastic_count(5, 12.3, 99);
+        assert_eq!(a, b);
+        assert!((4..=6).contains(&a), "fluctúa ±1 alrededor de 5");
+        // Base 0 jamás produce electrones de la nada.
+        assert_eq!(stochastic_count(0, 12.3, 99), 0);
+        // El desfase es estable por partícula y acotado.
+        let j1 = phase_jitter(2, 99);
+        assert_eq!(j1, phase_jitter(2, 99));
+        assert!(j1.abs() <= 0.06 + f32::EPSILON);
+        // Distintas λ dan distintas semillas.
+        assert_ne!(arrival_seed(300.0), arrival_seed(700.0));
+    }
+
+    #[test]
     fn engine_never_panics_on_garbage_inputs() {
         use crate::layers::cell::CellGeometry;
         // Geometría degenerada → 0 partículas en vez de posiciones NaN/inf.
@@ -217,6 +285,7 @@ mod tests {
             RenderQuality::Balanced,
             f32::NAN,
             5,
+            0,
         );
         assert!(none.is_empty());
         // Geometría sana + tiempo/velocidad basura → posiciones finitas.
@@ -237,8 +306,10 @@ mod tests {
             RenderQuality::Balanced,
             f32::NAN,
             5,
+            0,
         );
-        assert_eq!(particles.len(), 5);
+        // Conteo estocástico: 5 ± 1, siempre finito.
+        assert!((4..=6).contains(&particles.len()));
         for p in &particles {
             assert!(p.x.is_finite() && p.y.is_finite());
         }

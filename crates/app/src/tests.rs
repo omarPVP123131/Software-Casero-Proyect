@@ -252,3 +252,52 @@ fn readout_includes_photocurrent_and_collection_factor() {
     let factor = app.readout.collection_factor.expect("factor calculado");
     assert!((factor - 1.0).abs() < 1e-9, "a V=0 la colección es total");
 }
+
+#[test]
+fn full_experiment_flow_from_app_state_recovers_planck() {
+    use crate::physics_adapter::noisy_stopping_v;
+    use fotoelectrico_physics::fit_planck_constant;
+    use fotoelectrico_physics::DataPoint;
+    // Flujo extremo a extremo: controles → refresh → captura → ajuste.
+    let mut app = AppState::default();
+    for lambda in [300.0, 350.0, 400.0, 450.0] {
+        app.controls.wavelength_nm = lambda;
+        app.controls.applied_voltage_v = 0.0;
+        app.refresh_physics();
+        assert_eq!(app.readout.emission_possible, Some(true));
+        let freq = app.readout.frequency_hz.unwrap();
+        let ideal = app.readout.stopping_potential_v.unwrap();
+        let measured = noisy_stopping_v(ideal, 0.0, &mut app.experiment.next_seed);
+        app.experiment
+            .try_add(app.controls.material, lambda, freq, ideal, true, measured)
+            .expect("punto válido");
+    }
+    assert_eq!(app.experiment.points.len(), 4);
+    let data: Vec<DataPoint> = app
+        .experiment
+        .points
+        .iter()
+        .map(|p| DataPoint {
+            frequency_hz: p.frequency_hz,
+            stopping_potential_v: p.stopping_measured_v,
+        })
+        .collect();
+    let fit = fit_planck_constant(&data).expect("ajuste con 4 puntos");
+    assert!(fit.error_percentage < 0.01, "modo ideal recupera h");
+    assert!((fit.r_squared - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn scenario_presets_produce_expected_physics() {
+    use crate::state::Scenario;
+    let mut app = AppState::default();
+    // Contraste K/Pt a 400 nm: el potasio emite, el platino no.
+    app.apply_scenario(Scenario::Contrast);
+    assert_eq!(app.readout.emission_possible, Some(true));
+    assert_eq!(app.comparison_readout.emission_possible, Some(false));
+    // Frenado total: emisión sí, colección no.
+    app.apply_scenario(Scenario::Blocked);
+    assert_eq!(app.readout.emission_possible, Some(true));
+    assert_eq!(app.readout.collected_possible, Some(false));
+    assert_eq!(app.readout.photocurrent_a, Some(0.0));
+}

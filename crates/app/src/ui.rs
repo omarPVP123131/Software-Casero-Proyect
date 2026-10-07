@@ -6,7 +6,9 @@ use egui_macroquad::egui::{
 };
 use fotoelectrico_engine::layers::{
     cell::layout_geometry,
-    electrons::{electron_count, electron_speed_scale, electrons_visible, visual_electrons},
+    electrons::{
+        arrival_seed, electron_count, electron_speed_scale, electrons_visible, visual_electrons,
+    },
     field::arrow_segments,
     photons::{beam_lane_y, beam_x_bounds},
 };
@@ -447,7 +449,7 @@ fn draw_footer(ctx: &egui::Context, state: &AppState, palette: Palette) {
                 ) {
                     (Some(true), Some(true)) => ("EMISIÓN + COLECCIÓN", palette.green),
                     (Some(true), _) => ("EMISIÓN · BLOQUEADA EN ÁNODO", palette.amber),
-                    (Some(false), _) => ("SIN EMISIÓN · λ > λ₀", palette.muted),
+                    (Some(false), _) => ("SIN EMISIÓN · λ > λ0", palette.muted),
                     _ => ("CALCULANDO…", palette.amber),
                 };
                 ui.label(
@@ -674,7 +676,45 @@ fn draw_control_panel(
                 });
             });
             ui.add(egui::Slider::new(&mut state.controls.applied_voltage_v, -5.0..=5.0).show_value(false));
-            ui.label(RichText::new("Si V < −V₀ bloquea la colección (sin corriente) sin cambiar Kmax.").size(10.0).color(palette.muted));
+            ui.label(RichText::new("Si V < −V0 bloquea la colección (sin corriente) sin cambiar Kmax.").size(10.0).color(palette.muted));
+
+            ui.add_space(12.0);
+            ui.separator();
+            ui.label(RichText::new("Modelo de corriente (calibrable)").strong().color(palette.text));
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Área del cátodo").strong().color(palette.text));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(RichText::new(format!("{:.2} cm²", state.controls.cathode_area_cm2)).color(palette.cyan).strong());
+                });
+            });
+            ui.add(egui::Slider::new(&mut state.controls.cathode_area_cm2, 0.1..=10.0).show_value(false));
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Eficiencia cuántica").strong().color(palette.text));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(RichText::new(format!("{:.1}%", state.controls.quantum_efficiency_percent)).color(palette.cyan).strong());
+                });
+            });
+            ui.add(egui::Slider::new(&mut state.controls.quantum_efficiency_percent, 0.1..=30.0).show_value(false));
+            ui.label(RichText::new("I = e·Φ·A·QE·g(V). Ajusta con los datos de tu cátodo y cítalos.").size(10.0).color(palette.muted));
+
+            ui.add_space(12.0);
+            ui.separator();
+            ui.label(RichText::new("Escenarios de demo").strong().color(palette.text));
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                for scenario in crate::state::Scenario::ALL {
+                    if ui
+                        .button(scenario.label())
+                        .on_hover_text(scenario.detail())
+                        .clicked()
+                    {
+                        state.apply_scenario(scenario);
+                        *skip_control_history = true;
+                    }
+                }
+            });
+            ui.label(RichText::new("Ajustes de un clic para exponer sin pelear con sliders.").size(10.0).color(palette.muted));
 
             ui.add_space(12.0);
             ui.separator();
@@ -709,6 +749,7 @@ fn draw_control_panel(
                     }
                 });
                 ui.add(egui::Slider::new(&mut state.animation_speed, 0.25..=2.5).text("Velocidad"));
+                ui.label(RichText::new("La llegada fluctúa como Poisson visual; el valor medio lo da la física.").size(10.0).color(palette.muted));
             });
 
         ui.add_space(10.0);
@@ -774,7 +815,7 @@ fn draw_layer_controls(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
 
 fn draw_readout_panel(ui: &mut egui::Ui, state: &mut AppState, palette: Palette) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-        section_title(ui, "LECTURAS DEL EXPERIMENTO", "Motor fotoelectrico-physics · Kₘₐₓ = h·f − Φ (hover: LaTeX).", palette);
+        section_title(ui, "LECTURAS DEL EXPERIMENTO", "Motor fotoelectrico-physics · Kmax = h·f − Φ (hover: LaTeX).", palette);
         ui.add_space(8.0);
 
         let emission_color = match state.readout.emission_possible {
@@ -797,7 +838,7 @@ fn draw_readout_panel(ui: &mut egui::Ui, state: &mut AppState, palette: Palette)
         metric_row(ui, "Energía cinética máxima", format::ev(state.readout.max_kinetic_energy_ev), palette.green, "0 si no hay emisión.", math::KMAX, palette);
         metric_row(ui, "Potencial de frenado", format::volts(state.readout.stopping_potential_v), palette.blue, "Voltaje que frena al electrón más rápido.", math::STOPPING, palette);
         metric_row(ui, "Flujo de fotones", format::flux(state.readout.photon_flux_density_per_m2_s), palette.cyan, "100% = 10 mW/cm². Cambia cantidad, no energía.", math::FLUX, palette);
-        metric_row(ui, "Fotocorriente estimada", format::current(state.readout.photocurrent_a), palette.green, "I = e·Φ·A·QE·g(V). A = 1 cm², QE = 1% (demo).", math::PHOTOCURRENT, palette);
+        metric_row(ui, "Fotocorriente estimada", format::current(state.readout.photocurrent_a), palette.green, "I = e·Φ·A·QE·g(V). Calibra A y QE en Controles.", math::PHOTOCURRENT, palette);
         metric_row(ui, "Velocidad máx. electrón", format::speed(state.readout.electron_max_speed_m_s), palette.green, "Guía la animación del canvas.", math::SPEED, palette);
 
         // Explicación del porqué cuando no hay electrones: el motor sigue
@@ -807,14 +848,14 @@ fn draw_readout_panel(ui: &mut egui::Ui, state: &mut AppState, palette: Palette)
             state.readout.collected_possible,
         ) {
             (Some(false), _) => Some(
-                "Sin electrones porque λ > λ₀: el fotón no supera Φ. \
+                "Sin electrones porque λ > λ0: el fotón no supera Φ. \
                  El haz sigue incidiendo (sube intensidad o baja λ para emitir).",
             ),
             (Some(true), Some(false)) if state.controls.intensity_percent <= 0.1 => Some(
                 "Sin electrones porque la intensidad ≈ 0: no llegan fotones. Sube la intensidad.",
             ),
             (Some(true), Some(false)) => Some(
-                "Hay emisión pero no colección: V aplicado < −V₀ (frenado). \
+                "Hay emisión pero no colección: V aplicado < −V0 (frenado). \
                  Haz V menos negativo para recuperar la corriente; Kmax no cambia.",
             ),
             _ => None,
@@ -885,7 +926,12 @@ fn metric_row(
                         .strong()
                         .color(color),
                 );
-                ui.label(RichText::new(formula.rendered).small().color(palette.muted));
+                ui.label(
+                    RichText::new(formula.rendered)
+                        .small()
+                        .monospace()
+                        .color(palette.muted),
+                );
             });
         })
         .response
@@ -1324,6 +1370,7 @@ fn ui_visual_electrons(
         quality,
         speed,
         count,
+        arrival_seed(state.controls.wavelength_nm),
     )
 }
 
@@ -1471,13 +1518,13 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
     use fotoelectrico_physics::{fit_planck_constant, DataPoint};
 
     ui.label(
-        RichText::new("EXPERIMENTO V₀ CONTRA f")
+        RichText::new("EXPERIMENTO V0 CONTRA f")
             .size(10.0)
             .strong()
             .color(palette.cyan),
     );
     ui.label(
-        RichText::new("Mide V₀ a varias frecuencias, ajusta V₀ = m·f + b y estima h = e·m.")
+        RichText::new("Mide V0 a varias frecuencias, ajusta V0 = m·f + b y estima h = e·m.")
             .small()
             .color(palette.muted),
     );
@@ -1503,13 +1550,13 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
                     false,
                     "Ideal",
                 )
-                .on_hover_text("V₀ exacto del modelo.");
+                .on_hover_text("V0 exacto del modelo.");
                 ui.selectable_value(
                     &mut state.experiment.experimental_mode,
                     true,
                     "Experimental",
                 )
-                .on_hover_text("V₀ con ruido de medición.");
+                .on_hover_text("V0 con ruido de medición.");
                 if state.experiment.experimental_mode {
                     ui.add(
                         egui::Slider::new(&mut state.experiment.noise_percent, 0.0..=10.0)
@@ -1550,7 +1597,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             ui.add_space(4.0);
             ui.label(
                 RichText::new(format!(
-                    "Actual: {} · λ = {:.0} nm · f = {} · V₀ = {:.3} V",
+                    "Actual: {} · λ = {:.0} nm · f = {} · V0 = {:.3} V",
                     material.name(),
                     lambda,
                     format::scientific(freq, 2),
@@ -1561,8 +1608,8 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             ui.add_space(4.0);
             let can_add = emits;
             if ui
-                .add_enabled(can_add, egui::Button::new("Agregar punto actual (f, V₀)"))
-                .on_hover_text("Registra la frecuencia y el V₀ actuales en la tabla.")
+                .add_enabled(can_add, egui::Button::new("Agregar punto actual (f, V0)"))
+                .on_hover_text("Registra la frecuencia y el V0 actuales en la tabla.")
                 .clicked()
             {
                 let noise = if state.experiment.experimental_mode {
@@ -1599,7 +1646,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
         });
     ui.add_space(8.0);
 
-    // ---- 3. Ajuste V₀ = m·f + b ----
+    // ---- 3. Ajuste V0 = m·f + b ----
     let data: Vec<DataPoint> = state
         .experiment
         .points
@@ -1625,7 +1672,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             ui.add_space(4.0);
             match fit.as_ref() {
                 Some(result) => {
-                    metric_row(ui, "Pendiente m", format::slope(Some(result.slope_m)), palette.cyan, "Pendiente de V₀ = m·f + b.", math::FIT_LINE, palette);
+                    metric_row(ui, "Pendiente m", format::slope(Some(result.slope_m)), palette.cyan, "Pendiente de V0 = m·f + b.", math::FIT_LINE, palette);
                     metric_row(ui, "Ordenada b", format::volts(Some(result.intercept_b)), palette.cyan, "b ≈ −Φ/e del material.", math::FIT_LINE, palette);
                     metric_row(ui, "h estimada", format::planck(Some(result.h_experimental)), palette.green, "h = e·m a partir del ajuste.", math::PLANCK_FIT, palette);
                     metric_row(ui, "Error vs teórica", format::percent(Some(result.error_percentage)), palette.amber, "Comparada con h = 6.62607015×10⁻³⁴ J·s.", math::PLANCK_FIT, palette);
@@ -1651,7 +1698,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
         });
     ui.add_space(8.0);
 
-    // ---- 4. Gráfica V₀–f ----
+    // ---- 4. Gráfica V0–f ----
     draw_fit_plot(ui, &state.experiment.points, fit.as_ref(), palette);
     ui.add_space(8.0);
 
@@ -1683,7 +1730,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             ui.add_space(4.0);
             if state.experiment.points.is_empty() {
                 ui.label(
-                    RichText::new("Sin puntos: captura el (f, V₀) actual para empezar.")
+                    RichText::new("Sin puntos: captura el (f, V0) actual para empezar.")
                         .small()
                         .color(palette.muted),
                 );
@@ -1693,7 +1740,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
                     .striped(true)
                     .num_columns(6)
                     .show(ui, |ui| {
-                        for header in ["n", "λ (nm)", "f (Hz)", "V₀ med (V)", "mat", ""] {
+                        for header in ["n", "λ (nm)", "f (Hz)", "V0 med (V)", "mat", ""] {
                             ui.label(RichText::new(header).strong().color(palette.text));
                         }
                         ui.end_row();
@@ -1737,7 +1784,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             metric_row(ui, "Corriente actual", format::current(state.readout.photocurrent_a), palette.green, "I = e·Φ·A·QE·g(V) con A = 1 cm² y QE = 1% (demo).", math::PHOTOCURRENT, palette);
             draw_iv_plot(ui, state, palette);
             ui.label(
-                RichText::new("Saturación con V ≥ 0, rampa lineal hasta −V₀. Mueve el voltaje y mira el marcador.")
+                RichText::new("Saturación con V ≥ 0, rampa lineal hasta −V0. Mueve el voltaje y mira el marcador.")
                     .small()
                     .color(palette.muted),
             );
@@ -1761,7 +1808,7 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .button("Guardar CSV del experimento")
-                    .on_hover_text("Guarda la tabla (f, V₀) con unidades.")
+                    .on_hover_text("Guarda la tabla (f, V0) con unidades.")
                     .clicked()
                 {
                     let csv = experiment_csv(&state.experiment.points);
@@ -1825,7 +1872,7 @@ fn draw_fit_plot(
         .inner_margin(egui::Margin::symmetric(14, 12))
         .show(ui, |ui| {
             ui.label(
-                RichText::new("GRÁFICA V₀ CONTRA f")
+                RichText::new("GRÁFICA V0 CONTRA f")
                     .size(10.0)
                     .strong()
                     .color(palette.cyan),
@@ -1922,13 +1969,25 @@ fn draw_fit_plot(
                 );
             }
             for p in points {
-                painter.circle_filled(
-                    to_screen(p.frequency_hz, p.stopping_measured_v),
-                    4.5,
-                    palette.amber,
-                );
+                let center = to_screen(p.frequency_hz, p.stopping_measured_v);
+                // Barra de error ±ruido: conecta la tabla con la recta.
+                let half = p.stopping_measured_v * p.noise_percent as f64 / 100.0;
+                if half > 0.0 {
+                    let top = to_screen(p.frequency_hz, p.stopping_measured_v + half);
+                    let bottom = to_screen(p.frequency_hz, p.stopping_measured_v - half);
+                    painter.line_segment([top, bottom], Stroke::new(1.2_f32, palette.amber));
+                    for cap in [top, bottom] {
+                        painter.line_segment(
+                            [Pos2::new(cap.x - 4.0, cap.y), Pos2::new(cap.x + 4.0, cap.y)],
+                            Stroke::new(1.2_f32, palette.amber),
+                        );
+                    }
+                }
+                painter.circle_filled(center, 4.5, palette.amber);
             }
-            response.on_hover_text("Puntos medidos (ámbar) y recta V₀ = m·f + b (verde).");
+            response.on_hover_text(
+                "Puntos medidos (ámbar) con barra ±ruido y recta V0 = m·f + b (verde).",
+            );
         });
 }
 
@@ -1938,6 +1997,8 @@ fn draw_iv_plot(ui: &mut egui::Ui, state: &AppState, palette: Palette) {
     let v0 = state.readout.stopping_potential_v.unwrap_or(0.0);
     let intensity = state.controls.intensity_percent;
     let applied = state.controls.applied_voltage_v;
+    let area = state.controls.cathode_area_cm2;
+    let qe = state.controls.quantum_efficiency_percent;
     if !emits || flux <= 0.0 {
         ui.label(
             RichText::new("Sin curva I–V sin emisión: baja λ para medir corriente.")
@@ -1954,7 +2015,7 @@ fn draw_iv_plot(ui: &mut egui::Ui, state: &AppState, palette: Palette) {
         Pos2::new(rect.left() + 56.0, rect.top() + 12.0),
         Pos2::new(rect.right() - 14.0, rect.bottom() - 28.0),
     );
-    let imax = photocurrent_a(flux, emits, v0, 5.0, intensity).max(1e-12);
+    let imax = photocurrent_a(flux, emits, v0, 5.0, intensity, area, qe).max(1e-12);
     let to_screen = |v: f32, i: f64| {
         Pos2::new(
             plot.left() + ((v + 5.0) / 10.0) * plot.width(),
@@ -1979,14 +2040,17 @@ fn draw_iv_plot(ui: &mut egui::Ui, state: &AppState, palette: Palette) {
     let mut prev: Option<Pos2> = None;
     for i in 0..=60 {
         let v = -5.0 + i as f32 * (10.0 / 60.0);
-        let current = photocurrent_a(flux, emits, v0, v, intensity);
+        let current = photocurrent_a(flux, emits, v0, v, intensity, area, qe);
         let pos = to_screen(v, current);
         if let Some(p) = prev {
             painter.line_segment([p, pos], Stroke::new(2.0_f32, palette.cyan));
         }
         prev = Some(pos);
     }
-    let now = to_screen(applied, photocurrent_a(flux, emits, v0, applied, intensity));
+    let now = to_screen(
+        applied,
+        photocurrent_a(flux, emits, v0, applied, intensity, area, qe),
+    );
     painter.circle_filled(now, 5.0, palette.amber);
     painter.circle_stroke(now, 8.0, Stroke::new(1.0_f32, palette.amber));
     painter.text(
@@ -2114,7 +2178,7 @@ fn draw_comparison_card(
             );
             metric_row(
                 ui,
-                "V₀",
+                "V0",
                 format::volts(readout.stopping_potential_v),
                 palette.blue,
                 "Voltaje que frena al electrón más rápido.",
@@ -2429,7 +2493,7 @@ fn draw_shortcuts_window(ctx: &egui::Context, state: &mut AppState, palette: Pal
             ui.label("F11 · Modo presentación");
             ui.add_space(8.0);
             ui.label(RichText::new("Sobre esta escena").strong().color(palette.cyan));
-            ui.label(RichText::new("Valores, curva y emisión los calcula fotoelectrico-physics (Kₘₐₓ = h·f − Φ, V₀ = Kₘₐₓ/e; LaTeX en cada tarjeta). El dibujo de trayectorias es un esquema: la cantidad de electrones escala con intensidad/colección y su velocidad con √(Kₘₐₓ).").color(palette.text));
+            ui.label(RichText::new("Valores, curva y emisión los calcula fotoelectrico-physics (Kmax = h·f − Φ, V0 = Kmax/e; LaTeX en cada tarjeta). El dibujo de trayectorias es un esquema: la cantidad de electrones escala con intensidad/colección y su velocidad con √(Kmax).").color(palette.text));
         });
     state.show_shortcuts = open;
 }

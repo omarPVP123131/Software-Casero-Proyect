@@ -145,6 +145,7 @@ fn highlight_object(
                     frame.quality,
                     speed,
                     count,
+                    electrons::arrival_seed(frame.wavelength_nm),
                 ) {
                     draw_circle(particle.x, particle.y, 11.0, with_alpha(glow_alpha));
                     draw_circle_lines(particle.x, particle.y, 9.0, 2.0, with_alpha(0.9));

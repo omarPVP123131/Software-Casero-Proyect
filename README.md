@@ -29,6 +29,7 @@ cargo build --workspace
 - Aplicar voltaje de frenado: si `V < −V₀` la colección se bloquea sin cambiar `Kmax`; la curva I–V muestra la rampa.
 - Explorar la curva `Kmax(λ)`, comparar dos materiales y registrar la sesión.
 - Medir `V₀` a varias frecuencias en la pestaña Experimento (modo ideal o con ruido), ajustar `V₀ = m·f + b`, estimar `h` y exportar CSV.
+- Calibrar la fotocorriente (área y eficiencia cuántica) o usar los escenarios de demo en un clic.
 - Personalizar tema, paneles, capas del canvas, atajos y modo presentación.
 
 Detalles de uso en [`docs/user-guide.md`](docs/user-guide.md).

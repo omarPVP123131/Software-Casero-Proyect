@@ -1,6 +1,6 @@
 use fotoelectrico_engine::layers::{
     cell::layout_geometry,
-    electrons::{electron_count, electron_speed_scale, visual_electrons},
+    electrons::{arrival_seed, electron_count, electron_speed_scale, visual_electrons},
     field::arrow_segments,
     photons::{beam_lane_y, beam_x_bounds},
 };
@@ -41,6 +41,7 @@ fn state_electrons(
         RenderQuality::Balanced,
         speed,
         count,
+        arrival_seed(state.controls.wavelength_nm),
     )
 }
 
@@ -105,6 +106,7 @@ fn hidden_or_empty_layers_are_not_interactive_objects() {
         RenderQuality::Balanced,
         1.0,
         4,
+        arrival_seed(state.controls.wavelength_nm),
     )[0];
     assert_eq!(
         hit_test_object(&state, geometry, (particle.x, particle.y)),

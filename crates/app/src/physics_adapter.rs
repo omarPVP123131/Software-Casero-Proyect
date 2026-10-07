@@ -11,11 +11,11 @@ use crate::state::{AppState, CurvePoint, ExperimentControls, MaterialChoice, Phy
 /// (100 W/m²). Modelo lineal documentado para la demo.
 pub const REFERENCE_IRRADIANCE_W_M2: f64 = 100.0;
 
-/// Área emisora del cátodo (demo ilustrativa: 1 cm²).
-pub const CATHODE_AREA_M2: f64 = 1e-4;
+/// Área emisora por defecto del cátodo en cm² (calibrable en la UI).
+pub const DEFAULT_CATHODE_AREA_CM2: f32 = 1.0;
 
-/// Eficiencia cuántica ilustrativa: 1 de cada 100 fotones libera un electrón.
-pub const QUANTUM_EFFICIENCY: f64 = 0.01;
+/// Eficiencia cuántica por defecto en % (calibrable en la UI).
+pub const DEFAULT_QUANTUM_EFFICIENCY_PERCENT: f32 = 1.0;
 
 /// Rango de la curva Kmax(λ) mostrado en la pestaña Gráfica.
 pub const CURVE_MIN_NM: f64 = 180.0;
@@ -114,28 +114,32 @@ pub fn collection_factor(
 
 /// Fotocorriente estimada en amperios: `I = e·Φ·A·QE·g(V)`.
 ///
-/// `Φ` = flujo de fotones, `A` = área del cátodo, `QE` = eficiencia
-/// cuántica, `g(V)` = rampa de colección. Constantes A y QE ilustrativas
-/// (ver `CATHODE_AREA_M2`, `QUANTUM_EFFICIENCY`).
+/// `Φ` = flujo de fotones, `A` = área del cátodo en cm², `QE` = eficiencia
+/// cuántica en %, `g(V)` = rampa de colección. A y QE son calibrables en la
+/// UI (cita la fuente de tu cátodo para una exposición rigurosa).
 pub fn photocurrent_a(
     photon_flux_per_m2_s: f64,
     emits: bool,
     stopping_potential_v: f64,
     applied_voltage_v: f32,
     intensity_percent: f32,
+    cathode_area_cm2: f32,
+    quantum_efficiency_percent: f32,
 ) -> f64 {
     let flux = if photon_flux_per_m2_s.is_finite() && photon_flux_per_m2_s > 0.0 {
         photon_flux_per_m2_s
     } else {
         return 0.0;
     };
+    let area_m2 = sanitize(cathode_area_cm2, 1.0, 0.05, 25.0) as f64 * 1e-4;
+    let qe = sanitize(quantum_efficiency_percent, 1.0, 0.0, 50.0) as f64 / 100.0;
     let g = collection_factor(
         emits,
         stopping_potential_v,
         applied_voltage_v,
         intensity_percent,
     );
-    let current = constants::ELEMENTARY_CHARGE_E * flux * CATHODE_AREA_M2 * QUANTUM_EFFICIENCY * g;
+    let current = constants::ELEMENTARY_CHARGE_E * flux * area_m2 * qe * g;
     if current.is_finite() && current >= 0.0 {
         current
     } else {
@@ -187,6 +191,8 @@ pub fn build_readout(
     wavelength_nm: f32,
     intensity_percent: f32,
     applied_voltage_v: f32,
+    cathode_area_cm2: f32,
+    quantum_efficiency_percent: f32,
 ) -> PhysicsReadout {
     // Saneo total: el motor jamás se "desconecta" por parámetros extremos.
     let lambda = sanitize(wavelength_nm, 400.0, 180.0, 900.0) as f64;
@@ -214,6 +220,8 @@ pub fn build_readout(
         readout.stopping_potential_v,
         applied,
         intensity,
+        cathode_area_cm2,
+        quantum_efficiency_percent,
     );
 
     PhysicsReadout {
@@ -259,12 +267,16 @@ fn refresh_controls(state: &mut AppState, controls: ExperimentControls) {
         controls.wavelength_nm,
         controls.intensity_percent,
         controls.applied_voltage_v,
+        controls.cathode_area_cm2,
+        controls.quantum_efficiency_percent,
     );
     state.comparison_readout = build_readout(
         controls.comparison_material,
         controls.wavelength_nm,
         controls.intensity_percent,
         controls.applied_voltage_v,
+        controls.cathode_area_cm2,
+        controls.quantum_efficiency_percent,
     );
 }
 
@@ -295,12 +307,14 @@ pub fn session_csv(state: &AppState) -> String {
     let mut out = String::new();
     out.push_str("# PhotoLab — sesión del efecto fotoeléctrico\n");
     out.push_str(&format!(
-        "# material,{}\n# comparison_material,{}\n# wavelength_nm,{:.1}\n# intensity_percent,{:.1}\n# applied_voltage_v,{:+.2}\n",
+        "# material,{}\n# comparison_material,{}\n# wavelength_nm,{:.1}\n# intensity_percent,{:.1}\n# applied_voltage_v,{:+.2}\n# cathode_area_cm2,{:.2}\n# quantum_efficiency_percent,{:.1}\n",
         state.controls.material.name(),
         state.controls.comparison_material.name(),
         state.controls.wavelength_nm,
         state.controls.intensity_percent,
         state.controls.applied_voltage_v,
+        state.controls.cathode_area_cm2,
+        state.controls.quantum_efficiency_percent,
     ));
     let r = &state.readout;
     out.push_str(&format!(
@@ -371,7 +385,7 @@ mod tests {
 
     #[test]
     fn readout_uses_real_physics_values() {
-        let readout = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0);
+        let readout = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0, 1.0, 1.0);
         assert_eq!(readout.emission_possible, Some(true));
         assert!(readout.photon_energy_ev.unwrap() > 0.0);
         assert!(readout.max_kinetic_energy_ev.unwrap() > 0.0);
@@ -382,7 +396,7 @@ mod tests {
 
     #[test]
     fn red_light_does_not_emit_for_sodium_but_flux_exists() {
-        let readout = build_readout(MaterialChoice::Sodium, 700.0, 80.0, 0.0);
+        let readout = build_readout(MaterialChoice::Sodium, 700.0, 80.0, 0.0, 1.0, 1.0);
         assert_eq!(readout.emission_possible, Some(false));
         assert_eq!(readout.max_kinetic_energy_ev, Some(0.0));
         assert_eq!(readout.collected_possible, Some(false));
@@ -391,9 +405,16 @@ mod tests {
 
     #[test]
     fn retarding_voltage_blocks_collection_without_changing_kmax() {
-        let free = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0);
+        let free = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0, 1.0, 1.0);
         let v0 = free.stopping_potential_v.unwrap();
-        let blocked = build_readout(MaterialChoice::Sodium, 400.0, 55.0, (-v0 - 0.5) as f32);
+        let blocked = build_readout(
+            MaterialChoice::Sodium,
+            400.0,
+            55.0,
+            (-v0 - 0.5) as f32,
+            1.0,
+            1.0,
+        );
         assert_eq!(blocked.emission_possible, Some(true));
         assert_eq!(blocked.collected_possible, Some(false));
         assert_eq!(
@@ -404,8 +425,8 @@ mod tests {
 
     #[test]
     fn intensity_does_not_change_kmax_or_stopping() {
-        let low = build_readout(MaterialChoice::Sodium, 400.0, 10.0, 0.0);
-        let high = build_readout(MaterialChoice::Sodium, 400.0, 90.0, 0.0);
+        let low = build_readout(MaterialChoice::Sodium, 400.0, 10.0, 0.0, 1.0, 1.0);
+        let high = build_readout(MaterialChoice::Sodium, 400.0, 90.0, 0.0, 1.0, 1.0);
         assert_eq!(low.max_kinetic_energy_ev, high.max_kinetic_energy_ev);
         assert_eq!(low.stopping_potential_v, high.stopping_potential_v);
         assert!(
@@ -432,6 +453,8 @@ mod tests {
                         weird_lambda,
                         weird_intensity,
                         weird_voltage,
+                        1.0,
+                        1.0,
                     );
                     assert!(readout.emission_possible.is_some());
                     assert!(readout.collected_possible.is_some());
@@ -462,7 +485,7 @@ mod tests {
     fn long_wavelength_keeps_photon_flux_but_no_emission() {
         // Alta λ: el haz sigue (flujo > 0) aunque no haya emisión. Los fotones
         // no desaparecen por física, solo los electrones.
-        let readout = build_readout(MaterialChoice::Sodium, 900.0, 80.0, 0.0);
+        let readout = build_readout(MaterialChoice::Sodium, 900.0, 80.0, 0.0, 1.0, 1.0);
         assert_eq!(readout.emission_possible, Some(false));
         assert!(readout.photon_flux_density_per_m2_s.unwrap() > 0.0);
         assert!(readout.photon_energy_ev.unwrap() > 0.0);
@@ -471,8 +494,8 @@ mod tests {
     #[test]
     fn inverted_voltage_blocks_collection_keeps_photon_numbers() {
         // Voltaje invertido/frenado: bloquea colección sin tocar fotones ni Kmax.
-        let free = build_readout(MaterialChoice::Potassium, 300.0, 70.0, 0.0);
-        let blocked = build_readout(MaterialChoice::Potassium, 300.0, 70.0, -5.0);
+        let free = build_readout(MaterialChoice::Potassium, 300.0, 70.0, 0.0, 1.0, 1.0);
+        let blocked = build_readout(MaterialChoice::Potassium, 300.0, 70.0, -5.0, 1.0, 1.0);
         assert_eq!(blocked.emission_possible, Some(true));
         assert_eq!(blocked.collected_possible, Some(false));
         assert_eq!(
@@ -506,21 +529,34 @@ mod tests {
     #[test]
     fn collection_ramp_is_continuous_and_current_scales() {
         // Sodio 400 nm: V₀ ≈ 0.74 V. Rampa: 0 en −V₀, 1 en 0, 1 más allá.
-        let free = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0);
+        let free = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0, 1.0, 1.0);
         let v0 = free.stopping_potential_v.unwrap();
         assert!((free.collection_factor.unwrap() - 1.0).abs() < 1e-9);
-        let blocked = build_readout(MaterialChoice::Sodium, 400.0, 55.0, -5.0);
+        let blocked = build_readout(MaterialChoice::Sodium, 400.0, 55.0, -5.0, 1.0, 1.0);
         assert_eq!(blocked.collection_factor, Some(0.0));
         assert_eq!(blocked.photocurrent_a, Some(0.0));
         let mid = collection_factor(true, v0, (-v0 / 2.0) as f32, 55.0);
         assert!((mid - 0.5).abs() < 0.01, "rampa lineal a mitad del frenado");
         // Más intensidad → más corriente; sin emisión → cero.
-        let dim = build_readout(MaterialChoice::Sodium, 400.0, 10.0, 0.0);
-        let bright = build_readout(MaterialChoice::Sodium, 400.0, 90.0, 0.0);
+        let dim = build_readout(MaterialChoice::Sodium, 400.0, 10.0, 0.0, 1.0, 1.0);
+        let bright = build_readout(MaterialChoice::Sodium, 400.0, 90.0, 0.0, 1.0, 1.0);
         assert!(bright.photocurrent_a.unwrap() > dim.photocurrent_a.unwrap());
         assert!(bright.photocurrent_a.unwrap() > 0.0);
-        let dark = build_readout(MaterialChoice::Sodium, 700.0, 90.0, 0.0);
+        let dark = build_readout(MaterialChoice::Sodium, 700.0, 90.0, 0.0, 1.0, 1.0);
         assert_eq!(dark.photocurrent_a, Some(0.0));
+    }
+
+    #[test]
+    fn current_scales_with_area_and_qe() {
+        // Doble área → doble corriente; QE 0 → corriente 0. Calibrable.
+        let base = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0, 1.0, 1.0);
+        let double_area = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0, 2.0, 1.0);
+        assert!(
+            (double_area.photocurrent_a.unwrap() - 2.0 * base.photocurrent_a.unwrap()).abs()
+                < 1e-12
+        );
+        let no_qe = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0, 1.0, 0.0);
+        assert_eq!(no_qe.photocurrent_a, Some(0.0));
     }
 
     #[test]

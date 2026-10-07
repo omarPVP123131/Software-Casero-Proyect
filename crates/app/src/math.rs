@@ -1,12 +1,14 @@
-//! Fórmulas del efecto fotoeléctrico en LaTeX + renderizado Unicode.
+//! Fórmulas del efecto fotoeléctrico en LaTeX + renderizado para egui.
 //!
 //! egui no renderiza LaTeX de forma nativa, así que cada fórmula guarda su
-//! fuente LaTeX (para copiar al informe) y su renderizado Unicode con la
-//! misma semántica, que es lo que se pinta en la tarjeta:
+//! fuente LaTeX (para copiar al informe) y un renderizado con tipografía
+//! segura para fuentes UI: sin letras subíndice (ₘₐₓₑ no existen en la
+//! mayoría de fuentes y se ven como tofu). Se usan solo griego básico
+//! (λ Φ), operadores comunes (· − × √ → ²) y texto plano:
 //!
 //! ```text
 //! LaTeX:    $K_{\max} = hf - \Phi$
-//! Render:   Kₘₐₓ = h·f − Φ
+//! Render:   Kmax = h·f − Φ
 //! ```
 //!
 //! El tooltip de cada tarjeta muestra ambas formas.
@@ -16,7 +18,7 @@
 pub struct Formula {
     /// Fuente LaTeX lista para copiar, p. ej. `$K_{\max} = hf - \Phi$`.
     pub latex: &'static str,
-    /// Renderizado Unicode que se pinta, p. ej. `Kₘₐₓ = h·f − Φ`.
+    /// Renderizado que se pinta, p. ej. `Kmax = h·f − Φ`.
     pub rendered: &'static str,
 }
 
@@ -35,34 +37,34 @@ pub const PHOTON_ENERGY: Formula = Formula::new(r"$E = h\,f$", "E = h·f");
 /// LaTeX: `$\Phi$ (material)`
 pub const WORK_FUNCTION: Formula = Formula::new(r"$\Phi$ (material)", "Φ del material");
 /// LaTeX: `$f_0 = \Phi / h$`
-pub const THRESHOLD_FREQ: Formula = Formula::new(r"$f_0 = \Phi / h$", "f₀ = Φ / h");
+pub const THRESHOLD_FREQ: Formula = Formula::new(r"$f_0 = \Phi / h$", "f0 = Φ / h");
 /// LaTeX: `$\lambda_0 = c / f_0$`
-pub const THRESHOLD_WL: Formula = Formula::new(r"$\lambda_0 = c / f_0$", "λ₀ = c / f₀");
+pub const THRESHOLD_WL: Formula = Formula::new(r"$\lambda_0 = c / f_0$", "λ0 = c / f0");
 /// LaTeX: `$K_{\max} = h\,f - \Phi$`
-pub const KMAX: Formula = Formula::new(r"$K_{\max} = h\,f - \Phi$", "Kₘₐₓ = h·f − Φ");
+pub const KMAX: Formula = Formula::new(r"$K_{\max} = h\,f - \Phi$", "Kmax = h·f − Φ");
 /// LaTeX: `$V_0 = K_{\max} / e$`
-pub const STOPPING: Formula = Formula::new(r"$V_0 = K_{\max} / e$", "V₀ = Kₘₐₓ / e");
+pub const STOPPING: Formula = Formula::new(r"$V_0 = K_{\max} / e$", "V0 = Kmax / e");
 /// LaTeX: `$\Phi_{\text{fot}} = P / E_{\text{fotón}}$`
 pub const FLUX: Formula = Formula::new(
     r"$\Phi_{\text{fot}} = P / E_{\text{fotón}}$",
-    "Φ_fot = P / E_fotón",
+    "Flujo = P / E fotón",
 );
 /// LaTeX: `$v_{\max} = \sqrt{2\,K_{\max} / m_e}$`
 pub const SPEED: Formula = Formula::new(
     r"$v_{\max} = \sqrt{2\,K_{\max} / m_e}$",
-    "vₘₐₓ = √(2·Kₘₐₓ / mₑ)",
+    "vmax = √(2·Kmax / me)",
 );
 /// LaTeX: `$V < -V_0 \Rightarrow$ bloqueo`
 pub const COLLECTION: Formula =
-    Formula::new(r"$V < -V_0 \Rightarrow$ bloqueo", "V < −V₀ ⇒ bloqueo");
+    Formula::new(r"$V < -V_0 \Rightarrow$ bloqueo", "V < −V0 → bloqueo");
 /// LaTeX: `$V_0 = m\,f + b$`
-pub const FIT_LINE: Formula = Formula::new(r"$V_0 = m\,f + b$", "V₀ = m·f + b");
+pub const FIT_LINE: Formula = Formula::new(r"$V_0 = m\,f + b$", "V0 = m·f + b");
 /// LaTeX: `$h = e \cdot m$`
 pub const PLANCK_FIT: Formula = Formula::new(r"$h = e \cdot m$", "h = e·m");
 /// LaTeX: `$R^2 = 1 - SS_{\mathrm{res}} / SS_{\mathrm{tot}}$`
 pub const RSQUARED: Formula = Formula::new(
     r"$R^2 = 1 - SS_{\mathrm{res}} / SS_{\mathrm{tot}}$",
-    "R² = 1 − SS_res/SS_tot",
+    "R² = 1 − SSres / SStot",
 );
 /// LaTeX: `$I = e\,\Phi\,A\,\mathrm{QE}\,g(V)$`
 pub const PHOTOCURRENT: Formula =

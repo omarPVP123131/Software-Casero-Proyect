@@ -5,7 +5,18 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::{AppState, LabTab, UiPreferences};
+use crate::state::{AppState, ExperimentPoint, LabTab, UiPreferences};
+
+/// Subconjunto serializable del experimento: puntos, modo y semilla.
+/// El estado efímero (mensajes, última ruta) no se guarda.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct PersistedExperiment {
+    points: Vec<ExperimentPoint>,
+    experimental_mode: bool,
+    noise_percent: f32,
+    next_seed: u64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -13,6 +24,8 @@ struct PersistedUi {
     version: u32,
     preferences: UiPreferences,
     active_tab: LabTab,
+    experiment: PersistedExperiment,
+    notes: String,
 }
 
 impl Default for PersistedUi {
@@ -21,7 +34,24 @@ impl Default for PersistedUi {
             version: 1,
             preferences: UiPreferences::default(),
             active_tab: LabTab::Cell,
+            experiment: PersistedExperiment::default(),
+            notes: String::new(),
         }
+    }
+}
+
+fn snapshot_of(state: &AppState) -> PersistedUi {
+    PersistedUi {
+        version: 1,
+        preferences: state.preferences.clone(),
+        active_tab: state.active_tab,
+        experiment: PersistedExperiment {
+            points: state.experiment.points.clone(),
+            experimental_mode: state.experiment.experimental_mode,
+            noise_percent: state.experiment.noise_percent,
+            next_seed: state.experiment.next_seed,
+        },
+        notes: state.notes.clone(),
     }
 }
 
@@ -55,6 +85,11 @@ impl UiPersistence {
         }
         state.preferences = snapshot.preferences;
         state.active_tab = snapshot.active_tab;
+        state.experiment.points = snapshot.experiment.points;
+        state.experiment.experimental_mode = snapshot.experiment.experimental_mode;
+        state.experiment.noise_percent = snapshot.experiment.noise_percent;
+        state.experiment.next_seed = snapshot.experiment.next_seed;
+        state.notes = snapshot.notes;
         state.scene_camera.zoom = state.preferences.zoom;
         state.scene_camera.target_zoom = state.preferences.zoom;
         state.scene_camera.pan_x = 0.0;
@@ -62,12 +97,7 @@ impl UiPersistence {
         state.scene_camera.target_pan_x = 0.0;
         state.scene_camera.target_pan_y = 0.0;
         state.inspector = None;
-        persistence.last_serialized = serde_json::to_string(&PersistedUi {
-            version: 1,
-            preferences: state.preferences.clone(),
-            active_tab: state.active_tab,
-        })
-        .ok();
+        persistence.last_serialized = serde_json::to_string(&snapshot_of(state)).ok();
         persistence
     }
 
@@ -76,11 +106,7 @@ impl UiPersistence {
         if now_seconds - self.last_write_seconds < 0.5 {
             return;
         }
-        let snapshot = PersistedUi {
-            version: 1,
-            preferences: state.preferences.clone(),
-            active_tab: state.active_tab,
-        };
+        let snapshot = snapshot_of(state);
         let Ok(serialized) = serde_json::to_string_pretty(&snapshot) else {
             return;
         };
@@ -132,7 +158,7 @@ fn config_path() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PersistedUi, UiPreferences};
+    use super::{PersistedExperiment, PersistedUi, UiPreferences};
     use crate::state::{LabTab, LayoutPreset};
 
     #[test]
@@ -146,6 +172,7 @@ mod tests {
                 ..UiPreferences::default()
             },
             active_tab: LabTab::Chart,
+            ..PersistedUi::default()
         };
         let encoded = serde_json::to_string(&snapshot).unwrap();
         let decoded: PersistedUi = serde_json::from_str(&encoded).unwrap();
@@ -162,5 +189,44 @@ mod tests {
         let decoded: PersistedUi =
             serde_json::from_str(r#"{"version":1,"active_tab":"cell"}"#).unwrap();
         assert_eq!(decoded.preferences, UiPreferences::default());
+    }
+
+    #[test]
+    fn experiment_points_and_notes_round_trip() {
+        use crate::state::ExperimentPoint;
+        let snapshot = PersistedUi {
+            experiment: PersistedExperiment {
+                points: vec![ExperimentPoint {
+                    wavelength_nm: 400.0,
+                    frequency_hz: 7.49e14,
+                    stopping_measured_v: 0.74,
+                    stopping_ideal_v: 0.74,
+                    material_name: "Sodio".to_owned(),
+                    noise_percent: 0.0,
+                }],
+                experimental_mode: true,
+                noise_percent: 2.0,
+                next_seed: 42,
+            },
+            notes: "observar el umbral".to_owned(),
+            ..PersistedUi::default()
+        };
+        let encoded = serde_json::to_string(&snapshot).unwrap();
+        let decoded: PersistedUi = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded.experiment.points.len(), 1);
+        assert_eq!(decoded.experiment.points[0].material_name, "Sodio");
+        assert!(decoded.experiment.experimental_mode);
+        assert_eq!(decoded.notes, "observar el umbral");
+    }
+
+    #[test]
+    fn old_snapshot_without_experiment_loads_empty_table() {
+        // Archivos v1 sin los campos nuevos migran a tabla vacía + notas vacías.
+        let decoded: PersistedUi =
+            serde_json::from_str(r#"{"version":1,"active_tab":"experiment","preferences":{}}"#)
+                .unwrap();
+        assert_eq!(decoded.active_tab, LabTab::Experiment);
+        assert!(decoded.experiment.points.is_empty());
+        assert!(decoded.notes.is_empty());
     }
 }

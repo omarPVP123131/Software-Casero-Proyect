@@ -29,10 +29,10 @@ cargo build --workspace
 - **Cambiar Φ de un material.** Edita `MaterialChoice::work_function_ev` en `crates/app/src/state.rs` y documenta la fuente en `docs/physics-model.md`.
 - **Cambiar el modelo.** Edita `crates/physics`, añade/ajusta pruebas en el mismo archivo, y actualiza `docs/physics-model.md` en el mismo cambio.
 - **Añadir una lectura visible.** Extiende `PhysicsReadout` (app), calcúlala en `build_readout`, muéstrala en `ui.rs` y pásala a `SceneFrame` solo si el canvas la necesita.
-- **Persistencia.** Solo guarda preferencias y diseño (`persistence.rs`); controles y lecturas siempre arrancan de valores conocidos y se recalculan.
+- **Persistencia.** Guarda preferencias, diseño, notas y tabla del experimento (`persistence.rs`); controles y lecturas siempre arrancan de valores conocidos y se recalculan.
 
 ## Pruebas
 
-- `physics`: umbral, `Kmax(f)`, consistencia `λ ↔ f`, regresión.
-- `app`: arranque con física conectada, undo/redo con refresco, hit-test con colección/bloqueo, cámara e inspector.
-- `engine`: conteo por intensidad, velocidad por `Kmax`, cero electrones bloqueados.
+- `physics`: umbral, `Kmax(f)`, consistencia `λ ↔ f`, regresión + R², robustez ante entradas inválidas.
+- `app`: arranque con física conectada, undo/redo con refresco, hit-test con colección/bloqueo, cámara e inspector, experimento (validación, ajuste E2E, escenarios) y persistencia con migración.
+- `engine`: conteo por intensidad, velocidad por `Kmax`, cero electrones bloqueados, llegada estocástica determinista.

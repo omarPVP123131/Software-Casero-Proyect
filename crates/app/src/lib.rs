@@ -15,7 +15,7 @@ pub use physics_adapter::{
 };
 pub use state::{
     AppState, CurvePoint, DockPanel, ExperimentControls, ExperimentPoint, ExperimentState,
-    HistoryEntry, InspectedObject, LabTab, LayoutPreset, MaterialChoice, PhysicsReadout,
+    HistoryEntry, InspectedObject, LabTab, LayoutPreset, MaterialChoice, PhysicsReadout, Scenario,
     MAX_EXPERIMENT_POINTS,
 };
 

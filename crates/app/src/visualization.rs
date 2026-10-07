@@ -360,7 +360,7 @@ fn draw_data(painter: &egui::Painter, view: ChartDataView<'_>) {
             painter.text(
                 Pos2::new(x + 4.0, plot.top() + 12.0),
                 Align2::LEFT_CENTER,
-                "umbral λ₀ = c/f₀",
+                "umbral λ0 = c/f0",
                 FontId::proportional(9.0),
                 palette.amber,
             );

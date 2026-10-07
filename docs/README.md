@@ -9,3 +9,4 @@ Cada archivo responde una pregunta. Empieza por el que necesites; no hay orden o
 | [`user-guide.md`](user-guide.md) | ¿Cómo se usa la app y cómo se interpreta cada lectura? |
 | [`development.md`](development.md) | ¿Cómo compilo, pruebo y añado cambios sin romper el modelo? |
 | [`roadmap.md`](roadmap.md) | ¿Qué está hecho y qué falta? |
+| [`demo-checklist.md`](demo-checklist.md) | ¿Cómo verifico la app en el equipo de exposición? |

@@ -98,8 +98,8 @@ pub fn draw_labels(frame: &SceneFrame<'_>, geometry: CellGeometry, color: Color)
     );
     let status = match (frame.emission_possible, frame.collection_possible) {
         (Some(true), Some(true)) => "MOTOR · EMISIÓN + COLECCIÓN",
-        (Some(true), _) => "MOTOR · EMISIÓN BLOQUEADA (V < −V₀)",
-        (Some(false), _) => "MOTOR · SIN EMISIÓN (λ > λ₀)",
+        (Some(true), _) => "MOTOR · EMISIÓN BLOQUEADA (V < -V0)",
+        (Some(false), _) => "MOTOR · SIN EMISIÓN (λ > λ0)",
         (None, _) if frame.demo_electrons && frame.layers.electrons => {
             "DEMO · PARTÍCULAS ILUSTRATIVAS"
         }

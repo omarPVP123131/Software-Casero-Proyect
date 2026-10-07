@@ -6,6 +6,8 @@
 - **Longitud de onda (180–900 nm).** Fija `f = c/λ` y `E = hf`. Barrer de UV a IR cruza el umbral de cada material.
 - **Intensidad (%).** Fija el flujo de fotones (100 % = 10 mW/cm²). Subirla aumenta electrones y brillo, nunca `Kmax`.
 - **Voltaje aplicado (−5…+5 V).** Si es más negativo que `−V₀`, la colección se bloquea: verás “Colección: No · bloqueada” y cero electrones, con el mismo `Kmax`.
+- **Modelo de corriente.** Área del cátodo (cm²) y eficiencia cuántica (%) calibran la fotocorriente `I = e·Φ·A·QE·g(V)`.
+- **Escenarios de demo.** “Cruzar el umbral”, “Frenado total” y “K frente a Pt” ajustan varios controles de un clic.
 - **Comparación.** Segundo material evaluado con la misma `λ` e intensidad.
 
 ## Pestañas
@@ -14,7 +16,7 @@
 - **Gráfica.** Curva `Kmax(λ)` del material actual con línea de umbral `λ₀`. Zoom con rueda, desplazamiento por arrastre, valores con cursor y tabla opcional.
 - **Experimento.** Mide `V₀` a varias frecuencias: elige modo ideal o experimental (±ruido), captura el punto actual, ve la tabla, el ajuste `V₀ = m·f + b` (pendiente, `h = e·m`, error %, R²), la gráfica con recta, la curva I–V y exporta CSV.
 - **Comparar.** Principal frente a comparación: emisión, colección, `Φ`, `f₀`, `Kmax`, `V₀` y tamaño de curva.
-- **Registro.** Historial de cambios con tiempo de sesión y notas del operador (no afectan la física), más exportación de la sesión completa a CSV.
+- **Registro.** Historial de cambios con tiempo de sesión y notas del operador (no afectan la física), más exportación de la sesión completa a CSV. Las notas y la tabla del experimento se guardan al cerrar y se restauran al abrir.
 
 ## Lecturas (panel derecho)
 

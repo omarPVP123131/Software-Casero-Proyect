@@ -49,7 +49,8 @@ Definidos en `crates/app/src/physics_adapter.rs`:
 
 - **Intensidad → flujo.** 100 % = 10 mW/cm² (100 W/m²). `flujo = P / E_fotón` en fotones/m²·s. La intensidad no cambia `Kmax` ni `V₀`; solo la cantidad de electrones y el brillo del haz.
 - **Colección → corriente.** Hay colección si hay emisión, intensidad > 0.1 % y `V_aplicado ≥ −V₀`. Un voltaje de frenado más negativo bloquea la llegada al ánodo sin alterar `Kmax`.
-- **Rampa de colección y fotocorriente (demo).** Para la curva I–V se usa `g(V)` continua: 1 con `V ≥ 0`, rampa lineal hasta 0 en `−V₀`. La corriente es `I = e·Φ·A·QE·g(V)` con `A = 1 cm²` y `QE = 1 %` ilustrativos (no calibrados).
+- **Rampa de colección y fotocorriente (calibrable).** Para la curva I–V se usa `g(V)` continua: 1 con `V ≥ 0`, rampa lineal hasta 0 en `−V₀`. La corriente es `I = e·Φ·A·QE·g(V)` con área y QE editables en Controles (por defecto 1 cm² y 1 %); cita la fuente de tu cátodo para rigor.
+- **Llegada estocástica (solo visual).** El conteo de electrones fluctúa ±1 dos veces por segundo y cada partícula lleva un desfase propio, determinista en (tiempo, λ). El valor medio (corriente, Kmax) no fluctúa.
 - **Ruido experimental.** Modo experimental: `V₀` medido = ideal × (1 ± ruido) con ruido uniforme determinista (splitmix64, generado una vez por punto). El modo ideal verifica el modelo (R² ≈ 1); el experimental lo mide con dispersión.
 - **Ajuste.** Regresión `V₀ = m·f + b` con `h = e·m`, error % vs teórica y `R² = 1 − SS_res/SS_tot`.
 - **Curva.** `Kmax(λ)` con 61 puntos uniformes entre 180 y 900 nm, evaluando `calculate_effect` por punto.
@@ -67,6 +68,6 @@ El motor jamás devuelve NaN/inf ni se "desconecta":
 
 ## Limitaciones
 
-- Modelo ideal a 0 K efectivo: sin efectos de superficie ni temperatura; la QE y el área son ilustrativas.
-- La regresión en modo ideal verifica el modelo; en modo experimental la incertidumbre es sintética (ruido uniforme documentado), no instrumental.
+- Modelo ideal a 0 K efectivo: sin efectos de superficie ni temperatura; la QE y el área son editables pero no calibradas contra un cátodo real.
+- La regresión en modo ideal verifica el modelo; en modo experimental la incertidumbre es sintética (ruido uniforme documentado), no instrumental. Cada punto dibuja su barra ±ruido.
 - La rampa `g(V)` es lineal por simplicidad; no hay efectos espaciales de carga.

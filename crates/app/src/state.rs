@@ -62,6 +62,70 @@ impl MaterialChoice {
     }
 }
 
+/// Escenarios de demostración de un clic: ajustan varios controles a la vez
+/// para exponer sin pelear con sliders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scenario {
+    /// Sodio junto a su umbral (λ0 ≈ 525 nm): emisión apenas posible.
+    Threshold,
+    /// Sodio 400 nm con frenado total: emisión sí, colección no.
+    Blocked,
+    /// Potasio frente a platino a 400 nm: uno emite, el otro no.
+    Contrast,
+}
+
+impl Scenario {
+    pub const ALL: [Self; 3] = [Self::Threshold, Self::Blocked, Self::Contrast];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Threshold => "Cruzar el umbral",
+            Self::Blocked => "Frenado total",
+            Self::Contrast => "K frente a Pt",
+        }
+    }
+
+    pub const fn detail(self) -> &'static str {
+        match self {
+            Self::Threshold => "Sodio a 525 nm (junto a λ0): mueve ±20 nm y cruza el umbral.",
+            Self::Blocked => "Sodio a 400 nm con V = −2 V: hay emisión pero cero corriente.",
+            Self::Contrast => "Potasio frente a platino a 400 nm: uno emite, el otro no.",
+        }
+    }
+
+    pub fn controls(self) -> ExperimentControls {
+        match self {
+            Self::Threshold => ExperimentControls {
+                material: MaterialChoice::Sodium,
+                comparison_material: MaterialChoice::Copper,
+                wavelength_nm: 525.0,
+                intensity_percent: 60.0,
+                applied_voltage_v: 0.0,
+                cathode_area_cm2: 1.0,
+                quantum_efficiency_percent: 1.0,
+            },
+            Self::Blocked => ExperimentControls {
+                material: MaterialChoice::Sodium,
+                comparison_material: MaterialChoice::Copper,
+                wavelength_nm: 400.0,
+                intensity_percent: 60.0,
+                applied_voltage_v: -2.0,
+                cathode_area_cm2: 1.0,
+                quantum_efficiency_percent: 1.0,
+            },
+            Self::Contrast => ExperimentControls {
+                material: MaterialChoice::Potassium,
+                comparison_material: MaterialChoice::Platinum,
+                wavelength_nm: 400.0,
+                intensity_percent: 60.0,
+                applied_voltage_v: 0.0,
+                cathode_area_cm2: 1.0,
+                quantum_efficiency_percent: 1.0,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LabTab {
@@ -141,6 +205,10 @@ pub struct ExperimentControls {
     pub wavelength_nm: f32,
     pub intensity_percent: f32,
     pub applied_voltage_v: f32,
+    /// Área emisora del cátodo en cm² (modelo de corriente, calibrable).
+    pub cathode_area_cm2: f32,
+    /// Eficiencia cuántica en % (modelo de corriente, calibrable).
+    pub quantum_efficiency_percent: f32,
 }
 
 impl Default for ExperimentControls {
@@ -151,6 +219,8 @@ impl Default for ExperimentControls {
             wavelength_nm: 400.0,
             intensity_percent: 55.0,
             applied_voltage_v: 0.0,
+            cathode_area_cm2: 1.0,
+            quantum_efficiency_percent: 1.0,
         }
     }
 }
@@ -281,12 +351,12 @@ pub struct PhysicsReadout {
     pub kinetic_energy_curve: Vec<CurvePoint>,
 }
 
-/// Un punto medido del experimento V₀ contra f.
+/// Un punto medido del experimento V0 contra f.
 ///
-/// Guarda el V₀ ideal y el medido (con ruido si el modo experimental está
+/// Guarda el V0 ideal y el medido (con ruido si el modo experimental está
 /// activo). El ruido se genera una sola vez al capturar el punto, así el
 /// valor es estable entre frames.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExperimentPoint {
     pub wavelength_nm: f32,
     pub frequency_hz: f64,
@@ -296,11 +366,11 @@ pub struct ExperimentPoint {
     pub noise_percent: f32,
 }
 
-/// Estado del experimento V₀ contra f y su configuración.
+/// Estado del experimento V0 contra f y su configuración.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentState {
     pub points: Vec<ExperimentPoint>,
-    /// false = ideal (V₀ exacto), true = experimental (ruido ±`noise_percent` %).
+    /// false = ideal (V0 exacto), true = experimental (ruido ±`noise_percent` %).
     pub experimental_mode: bool,
     pub noise_percent: f32,
     /// Semilla del generador determinista (estable entre frames).
@@ -340,14 +410,14 @@ impl ExperimentState {
         noise_applied_v: f64,
     ) -> Result<(), String> {
         if !emits {
-            return Err("Sin emisión a esta λ (λ > λ₀): baja la longitud de onda.".to_owned());
+            return Err("Sin emisión a esta λ (λ > λ0): baja la longitud de onda.".to_owned());
         }
         if self.points.len() >= MAX_EXPERIMENT_POINTS {
             return Err(format!(
                 "Tabla llena ({MAX_EXPERIMENT_POINTS} puntos). Quita alguno."
             ));
         }
-        // El ajuste V₀ = m·f + b supone un solo Φ: no mezclar materiales.
+        // El ajuste V0 = m·f + b supone un solo Φ: no mezclar materiales.
         if let Some(first) = self.points.first() {
             if first.material_name != material.name() {
                 return Err(format!(
@@ -376,7 +446,7 @@ impl ExperimentState {
             },
         });
         self.status = format!(
-            "Punto {} agregado: λ = {:.0} nm, V₀ = {:.3} V{}.",
+            "Punto {} agregado: λ = {:.0} nm, V0 = {:.3} V{}.",
             self.points.len(),
             wavelength_nm,
             noise_applied_v,
@@ -753,6 +823,16 @@ impl AppState {
         self.record_control_change(before);
     }
 
+    /// Aplica un escenario de demo: sustituye los controles, lo registra en
+    /// el historial y recalcula la física. El llamador decide si cuenta para undo.
+    pub fn apply_scenario(&mut self, scenario: Scenario) {
+        self.controls = scenario.controls();
+        self.last_undo_group = None;
+        self.redo_stack.clear();
+        self.push_history(format!("Escenario aplicado: {}", scenario.label()));
+        self.refresh_physics();
+    }
+
     /// Recalcula las lecturas con el motor físico. Llamar tras cambiar
     /// controles y una vez por frame en el loop principal.
     pub fn refresh_physics(&mut self) {
@@ -800,6 +880,13 @@ fn control_diff(before: ExperimentControls, after: ExperimentControls) -> String
         format!("Intensidad -> {:.0}%", after.intensity_percent)
     } else if (before.applied_voltage_v - after.applied_voltage_v).abs() > 0.01 {
         format!("Voltaje aplicado -> {:+.1} V", after.applied_voltage_v)
+    } else if (before.cathode_area_cm2 - after.cathode_area_cm2).abs() > 0.001 {
+        format!("Área del cátodo -> {:.2} cm²", after.cathode_area_cm2)
+    } else if (before.quantum_efficiency_percent - after.quantum_efficiency_percent).abs() > 0.01 {
+        format!(
+            "Eficiencia cuántica -> {:.1}%",
+            after.quantum_efficiency_percent
+        )
     } else {
         "Controles actualizados".to_owned()
     }
