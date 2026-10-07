@@ -184,3 +184,71 @@ fn animation_clock_does_not_touch_physics_readouts() {
     assert!(app.animation_time_seconds > 0.0);
     assert_eq!(app.readout, initial_readout);
 }
+
+#[test]
+fn experiment_table_rejects_no_emission_duplicates_and_mixed_materials() {
+    use crate::state::{ExperimentState, MAX_EXPERIMENT_POINTS};
+    let mut exp = ExperimentState::default();
+    assert!(exp.points.is_empty());
+
+    // Sin emisión no se puede medir.
+    assert!(exp
+        .try_add(MaterialChoice::Sodium, 700.0, 4.28e14, 0.0, false, 0.0)
+        .is_err());
+
+    // Punto válido.
+    assert!(exp
+        .try_add(MaterialChoice::Sodium, 400.0, 7.49e14, 0.74, true, 0.74)
+        .is_ok());
+    assert_eq!(exp.points.len(), 1);
+
+    // Duplicado de λ (±0.5 nm) se rechaza.
+    assert!(exp
+        .try_add(MaterialChoice::Sodium, 400.3, 7.49e14, 0.74, true, 0.74)
+        .is_err());
+
+    // Otro material exige vaciar primero (el ajuste supone un solo Φ).
+    assert!(exp
+        .try_add(MaterialChoice::Copper, 300.0, 9.99e14, 1.5, true, 1.5)
+        .is_err());
+
+    exp.remove(0);
+    assert!(exp.points.is_empty());
+    assert!(exp
+        .try_add(MaterialChoice::Copper, 300.0, 9.99e14, 1.5, true, 1.5)
+        .is_ok());
+
+    exp.clear();
+    assert!(exp.points.is_empty());
+    assert_eq!(MAX_EXPERIMENT_POINTS, 24);
+}
+
+#[test]
+fn experiment_fit_recovers_planck_from_ideal_points() {
+    use fotoelectrico_physics::{fit_planck_constant, DataPoint};
+    // Recta teórica del sodio: V₀ = (h/e)·f − Φ/e.
+    let h = 6.62607015e-34;
+    let e = 1.602176634e-19;
+    let points: Vec<DataPoint> = [400.0, 350.0, 300.0, 250.0]
+        .iter()
+        .map(|nm| {
+            let f = 299_792_458.0 / (nm * 1e-9);
+            DataPoint {
+                frequency_hz: f,
+                stopping_potential_v: h * f / e - 2.36,
+            }
+        })
+        .collect();
+    let fit = fit_planck_constant(&points).unwrap();
+    assert!((fit.r_squared - 1.0).abs() < 1e-9);
+    assert!(fit.error_percentage < 0.01);
+}
+
+#[test]
+fn readout_includes_photocurrent_and_collection_factor() {
+    let app = AppState::default();
+    let current = app.readout.photocurrent_a.expect("fotocorriente calculada");
+    assert!(current.is_finite() && current > 0.0);
+    let factor = app.readout.collection_factor.expect("factor calculado");
+    assert!((factor - 1.0).abs() < 1e-9, "a V=0 la colección es total");
+}

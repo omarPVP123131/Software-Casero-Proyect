@@ -1,5 +1,7 @@
 //! Interfaz egui conectada al motor físico y al renderer Macroquad.
 
+pub mod format;
+pub mod math;
 mod persistence;
 pub mod physics_adapter;
 pub mod state;
@@ -12,8 +14,9 @@ pub use physics_adapter::{
     electron_speed_scale, photoelectron_strength, refresh_state, REFERENCE_IRRADIANCE_W_M2,
 };
 pub use state::{
-    AppState, CurvePoint, DockPanel, ExperimentControls, HistoryEntry, InspectedObject, LabTab,
-    LayoutPreset, MaterialChoice, PhysicsReadout,
+    AppState, CurvePoint, DockPanel, ExperimentControls, ExperimentPoint, ExperimentState,
+    HistoryEntry, InspectedObject, LabTab, LayoutPreset, MaterialChoice, PhysicsReadout,
+    MAX_EXPERIMENT_POINTS,
 };
 
 /// Región del canvas que `engine` debe dibujar después de construir la UI.

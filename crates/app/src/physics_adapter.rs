@@ -11,6 +11,12 @@ use crate::state::{AppState, CurvePoint, ExperimentControls, MaterialChoice, Phy
 /// (100 W/m²). Modelo lineal documentado para la demo.
 pub const REFERENCE_IRRADIANCE_W_M2: f64 = 100.0;
 
+/// Área emisora del cátodo (demo ilustrativa: 1 cm²).
+pub const CATHODE_AREA_M2: f64 = 1e-4;
+
+/// Eficiencia cuántica ilustrativa: 1 de cada 100 fotones libera un electrón.
+pub const QUANTUM_EFFICIENCY: f64 = 0.01;
+
 /// Rango de la curva Kmax(λ) mostrado en la pestaña Gráfica.
 pub const CURVE_MIN_NM: f64 = 180.0;
 pub const CURVE_MAX_NM: f64 = 900.0;
@@ -49,9 +55,9 @@ pub fn photon_flux_density_per_m2_s(intensity_percent: f32, photon_energy_j: f64
 
 /// ¿Llegan los fotoelectrones al ánodo con el voltaje aplicado?
 ///
-/// Modelo mínimo: el frenado bloquea la colección cuando
-/// `V_aplicado < -V0`. Kmax y V0 no cambian; solo la corriente colectada.
-/// Garantía: entradas inválidas → sin colección (no electrones) pero sin fallar.
+/// Modelo mínimo binario para la animación: el frenado bloquea la colección
+/// cuando `V_aplicado < -V0`. Kmax y V0 no cambian; solo la corriente
+/// colectada. Garantía: entradas inválidas → sin colección pero sin fallar.
 pub fn is_collected(
     emits: bool,
     stopping_potential_v: f64,
@@ -69,6 +75,96 @@ pub fn is_collected(
         return false;
     }
     (applied as f64) >= -v0 - 1e-9
+}
+
+/// Fracción de colección continua 0..1 (rampa de frenado).
+///
+/// A diferencia de `is_collected` (binario, para la animación), esto modela
+/// la curva I–V: con `V ≥ 0` se colecta todo; entre `−V₀` y 0 la colección
+/// crece linealmente; por debajo de `−V₀` es cero. Kmax no cambia.
+pub fn collection_factor(
+    emits: bool,
+    stopping_potential_v: f64,
+    applied_voltage_v: f32,
+    intensity_percent: f32,
+) -> f64 {
+    let intensity = sanitize(intensity_percent, 0.0, 0.0, 100.0);
+    let applied = sanitize(applied_voltage_v, 0.0, -30.0, 30.0) as f64;
+    let v0 = if stopping_potential_v.is_finite() && stopping_potential_v > 0.0 {
+        stopping_potential_v
+    } else {
+        0.0
+    };
+    if !emits || intensity <= 0.1 || v0 <= 0.0 {
+        // Sin V₀ (sin emisión) no hay rampa que modelar; con V ≥ 0 y emisión
+        // la colección es total aunque v0 sea 0 por redondeo.
+        if emits && intensity > 0.1 && applied >= 0.0 {
+            return 1.0;
+        }
+        return 0.0;
+    }
+    if applied >= 0.0 {
+        1.0
+    } else if applied <= -v0 {
+        0.0
+    } else {
+        ((applied + v0) / v0).clamp(0.0, 1.0)
+    }
+}
+
+/// Fotocorriente estimada en amperios: `I = e·Φ·A·QE·g(V)`.
+///
+/// `Φ` = flujo de fotones, `A` = área del cátodo, `QE` = eficiencia
+/// cuántica, `g(V)` = rampa de colección. Constantes A y QE ilustrativas
+/// (ver `CATHODE_AREA_M2`, `QUANTUM_EFFICIENCY`).
+pub fn photocurrent_a(
+    photon_flux_per_m2_s: f64,
+    emits: bool,
+    stopping_potential_v: f64,
+    applied_voltage_v: f32,
+    intensity_percent: f32,
+) -> f64 {
+    let flux = if photon_flux_per_m2_s.is_finite() && photon_flux_per_m2_s > 0.0 {
+        photon_flux_per_m2_s
+    } else {
+        return 0.0;
+    };
+    let g = collection_factor(
+        emits,
+        stopping_potential_v,
+        applied_voltage_v,
+        intensity_percent,
+    );
+    let current = constants::ELEMENTARY_CHARGE_E * flux * CATHODE_AREA_M2 * QUANTUM_EFFICIENCY * g;
+    if current.is_finite() && current >= 0.0 {
+        current
+    } else {
+        0.0
+    }
+}
+
+/// Generador determinista splitmix64: el ruido experimental es estable entre
+/// frames porque se genera una sola vez al capturar cada punto.
+pub fn splitmix_next(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Aplica ruido uniforme ±`noise_percent` % al V₀ ideal. Determinista por semilla.
+pub fn noisy_stopping_v(ideal_v: f64, noise_percent: f32, seed: &mut u64) -> f64 {
+    let noise = noise_percent.clamp(0.0, 25.0) as f64 / 100.0;
+    if !(ideal_v.is_finite() && ideal_v > 0.0) || noise <= 0.0 {
+        return if ideal_v.is_finite() && ideal_v >= 0.0 {
+            ideal_v
+        } else {
+            0.0
+        };
+    }
+    let u = splitmix_next(seed) as f64 / u64::MAX as f64; // [0, 1)
+    (ideal_v * (1.0 + (u * 2.0 - 1.0) * noise)).max(0.0)
 }
 
 fn frequency_hz_for(wavelength_nm: f64) -> f64 {
@@ -106,6 +202,19 @@ pub fn build_readout(
         applied,
         intensity,
     );
+    let factor = collection_factor(
+        readout.emits,
+        readout.stopping_potential_v,
+        applied,
+        intensity,
+    );
+    let current = photocurrent_a(
+        flux,
+        readout.emits,
+        readout.stopping_potential_v,
+        applied,
+        intensity,
+    );
 
     PhysicsReadout {
         emission_possible: Some(readout.emits),
@@ -119,6 +228,8 @@ pub fn build_readout(
         stopping_potential_v: Some(readout.stopping_potential_v),
         photon_flux_density_per_m2_s: Some(flux),
         electron_max_speed_m_s: Some(readout.electron_max_speed_m_s),
+        photocurrent_a: Some(current),
+        collection_factor: Some(factor),
         kinetic_energy_curve: build_curve(&physics_material),
     }
 }
@@ -155,6 +266,78 @@ fn refresh_controls(state: &mut AppState, controls: ExperimentControls) {
         controls.intensity_percent,
         controls.applied_voltage_v,
     );
+}
+
+/// CSV del experimento V₀ contra f. Encabezados con unidades.
+/// Incluye V₀ ideal y medido (con ruido) para auditar el ajuste.
+pub fn experiment_csv(points: &[crate::state::ExperimentPoint]) -> String {
+    let mut out = String::from(
+        "n,material,wavelength_nm,frequency_hz,stopping_ideal_v,stopping_measured_v,noise_percent\n",
+    );
+    for (i, p) in points.iter().enumerate() {
+        out.push_str(&format!(
+            "{},{},{:.2},{:.6e},{:.6},{:.6},{:.1}\n",
+            i + 1,
+            p.material_name,
+            p.wavelength_nm,
+            p.frequency_hz,
+            p.stopping_ideal_v,
+            p.stopping_measured_v,
+            p.noise_percent,
+        ));
+    }
+    out
+}
+
+/// CSV de la sesión completa: parámetros, lecturas, curva Kmax(λ),
+/// puntos del experimento y notas del operador.
+pub fn session_csv(state: &AppState) -> String {
+    let mut out = String::new();
+    out.push_str("# PhotoLab — sesión del efecto fotoeléctrico\n");
+    out.push_str(&format!(
+        "# material,{}\n# comparison_material,{}\n# wavelength_nm,{:.1}\n# intensity_percent,{:.1}\n# applied_voltage_v,{:+.2}\n",
+        state.controls.material.name(),
+        state.controls.comparison_material.name(),
+        state.controls.wavelength_nm,
+        state.controls.intensity_percent,
+        state.controls.applied_voltage_v,
+    ));
+    let r = &state.readout;
+    out.push_str(&format!(
+        "# emission,{}\n# collected,{}\n# frequency_hz,{:.6e}\n# photon_energy_ev,{:.4}\n# work_function_ev,{:.4}\n# kmax_ev,{:.4}\n# stopping_v,{:.4}\n# photocurrent_a,{:.6e}\n",
+        r.emission_possible.unwrap_or(false),
+        r.collected_possible.unwrap_or(false),
+        r.frequency_hz.unwrap_or(0.0),
+        r.photon_energy_ev.unwrap_or(0.0),
+        r.work_function_ev.unwrap_or(0.0),
+        r.max_kinetic_energy_ev.unwrap_or(0.0),
+        r.stopping_potential_v.unwrap_or(0.0),
+        r.photocurrent_a.unwrap_or(0.0),
+    ));
+    out.push_str("\n[curva_kmax_vs_lambda]\nwavelength_nm,kmax_ev\n");
+    for point in &r.kinetic_energy_curve {
+        out.push_str(&format!(
+            "{:.2},{:.6}\n",
+            point.wavelength_nm, point.max_kinetic_energy_ev
+        ));
+    }
+    out.push_str("\n[experimento_v0_vs_f]\n");
+    out.push_str(&experiment_csv(&state.experiment.points));
+    out.push_str("\n[notas]\n");
+    for line in state.notes.lines() {
+        out.push_str(&format!("# {line}\n"));
+    }
+    out
+}
+
+/// Guarda texto en el directorio de trabajo. Devuelve la ruta absoluta
+/// para mostrarla en la UI. Sin diálogos: simple y sin dependencias.
+pub fn save_text_file(filename: &str, contents: &str) -> Result<String, String> {
+    std::fs::write(filename, contents).map_err(|e| format!("No se pudo guardar: {e}"))?;
+    let path = std::env::current_dir()
+        .map(|dir| dir.join(filename).to_string_lossy().into_owned())
+        .unwrap_or_else(|_| filename.to_owned());
+    Ok(path)
 }
 
 /// Escala visual de velocidad a partir de Kmax: v ∝ sqrt(K).
@@ -262,6 +445,8 @@ mod tests {
                         readout.stopping_potential_v,
                         readout.photon_flux_density_per_m2_s,
                         readout.electron_max_speed_m_s,
+                        readout.photocurrent_a,
+                        readout.collection_factor,
                     ] {
                         let v = value.expect("toda lectura debe ser Some");
                         assert!(v.is_finite(), "lectura finita con λ={weird_lambda}");
@@ -302,5 +487,47 @@ mod tests {
             blocked.photon_flux_density_per_m2_s, free.photon_flux_density_per_m2_s,
             "el voltaje no toca el flujo"
         );
+    }
+
+    #[test]
+    fn noise_is_deterministic_and_bounded() {
+        let mut a = 12345u64;
+        let mut b = 12345u64;
+        let v1 = noisy_stopping_v(1.0, 5.0, &mut a);
+        let v2 = noisy_stopping_v(1.0, 5.0, &mut b);
+        assert_eq!(v1, v2, "misma semilla → mismo ruido");
+        assert!((v1 - 1.0).abs() <= 0.05 + 1e-12, "ruido dentro de ±5%");
+        let mut c = 999u64;
+        assert_eq!(noisy_stopping_v(1.0, 0.0, &mut c), 1.0, "sin ruido → ideal");
+        assert_eq!(noisy_stopping_v(0.0, 5.0, &mut c), 0.0);
+        assert!(noisy_stopping_v(1.0, 5.0, &mut c) >= 0.0);
+    }
+
+    #[test]
+    fn collection_ramp_is_continuous_and_current_scales() {
+        // Sodio 400 nm: V₀ ≈ 0.74 V. Rampa: 0 en −V₀, 1 en 0, 1 más allá.
+        let free = build_readout(MaterialChoice::Sodium, 400.0, 55.0, 0.0);
+        let v0 = free.stopping_potential_v.unwrap();
+        assert!((free.collection_factor.unwrap() - 1.0).abs() < 1e-9);
+        let blocked = build_readout(MaterialChoice::Sodium, 400.0, 55.0, -5.0);
+        assert_eq!(blocked.collection_factor, Some(0.0));
+        assert_eq!(blocked.photocurrent_a, Some(0.0));
+        let mid = collection_factor(true, v0, (-v0 / 2.0) as f32, 55.0);
+        assert!((mid - 0.5).abs() < 0.01, "rampa lineal a mitad del frenado");
+        // Más intensidad → más corriente; sin emisión → cero.
+        let dim = build_readout(MaterialChoice::Sodium, 400.0, 10.0, 0.0);
+        let bright = build_readout(MaterialChoice::Sodium, 400.0, 90.0, 0.0);
+        assert!(bright.photocurrent_a.unwrap() > dim.photocurrent_a.unwrap());
+        assert!(bright.photocurrent_a.unwrap() > 0.0);
+        let dark = build_readout(MaterialChoice::Sodium, 700.0, 90.0, 0.0);
+        assert_eq!(dark.photocurrent_a, Some(0.0));
+    }
+
+    #[test]
+    fn csv_builders_have_headers_and_units() {
+        let csv = experiment_csv(&[]);
+        assert!(csv.starts_with("n,material,"));
+        assert!(csv.contains("frequency_hz"));
+        assert!(csv.contains("stopping_measured_v"));
     }
 }

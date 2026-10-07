@@ -24,10 +24,11 @@ cargo build --workspace
 ## Qué puedes hacer
 
 - Elegir cátodo (K, Na, Ca, Zn, Cu, Pt) y barrer longitud de onda 180–900 nm.
-- Ver emisión, `f₀`, `λ₀`, energía del fotón, `Kmax`, `V₀`, flujo de fotones y velocidad del electrón.
+- Ver emisión, `f₀`, `λ₀`, energía del fotón, `Kmax`, `V₀`, flujo de fotones, fotocorriente y velocidad del electrón.
 - Comprobar que la intensidad cambia la cantidad de electrones, no su energía.
-- Aplicar voltaje de frenado: si `V < −V₀` la colección se bloquea sin cambiar `Kmax`.
+- Aplicar voltaje de frenado: si `V < −V₀` la colección se bloquea sin cambiar `Kmax`; la curva I–V muestra la rampa.
 - Explorar la curva `Kmax(λ)`, comparar dos materiales y registrar la sesión.
+- Medir `V₀` a varias frecuencias en la pestaña Experimento (modo ideal o con ruido), ajustar `V₀ = m·f + b`, estimar `h` y exportar CSV.
 - Personalizar tema, paneles, capas del canvas, atajos y modo presentación.
 
 Detalles de uso en [`docs/user-guide.md`](docs/user-guide.md).
@@ -86,7 +87,7 @@ Cada `.md` existe para responder una pregunta concreta; el índice está en [`do
 
 ## Estado
 
-Física, interfaz y visualización básica conectadas y probadas. Pendiente: tabla `V₀` contra `f` con regresión visible en la UI y exportación CSV. Ver [`docs/roadmap.md`](docs/roadmap.md).
+Física, interfaz, experimento `V₀–f` con regresión y exportación CSV, y visualización conectadas y probadas. Ver [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Licencia y autoría
 

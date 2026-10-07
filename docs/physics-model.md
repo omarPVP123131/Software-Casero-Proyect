@@ -49,6 +49,9 @@ Definidos en `crates/app/src/physics_adapter.rs`:
 
 - **Intensidad → flujo.** 100 % = 10 mW/cm² (100 W/m²). `flujo = P / E_fotón` en fotones/m²·s. La intensidad no cambia `Kmax` ni `V₀`; solo la cantidad de electrones y el brillo del haz.
 - **Colección → corriente.** Hay colección si hay emisión, intensidad > 0.1 % y `V_aplicado ≥ −V₀`. Un voltaje de frenado más negativo bloquea la llegada al ánodo sin alterar `Kmax`.
+- **Rampa de colección y fotocorriente (demo).** Para la curva I–V se usa `g(V)` continua: 1 con `V ≥ 0`, rampa lineal hasta 0 en `−V₀`. La corriente es `I = e·Φ·A·QE·g(V)` con `A = 1 cm²` y `QE = 1 %` ilustrativos (no calibrados).
+- **Ruido experimental.** Modo experimental: `V₀` medido = ideal × (1 ± ruido) con ruido uniforme determinista (splitmix64, generado una vez por punto). El modo ideal verifica el modelo (R² ≈ 1); el experimental lo mide con dispersión.
+- **Ajuste.** Regresión `V₀ = m·f + b` con `h = e·m`, error % vs teórica y `R² = 1 − SS_res/SS_tot`.
 - **Curva.** `Kmax(λ)` con 61 puntos uniformes entre 180 y 900 nm, evaluando `calculate_effect` por punto.
 - **Animación.** Escala visual de velocidad `√(Kmax / 1 eV)` entre 0.5 y 2.2; cantidad de electrones por intensidad y colección. Es visualización, no integración de trayectorias.
 
@@ -64,6 +67,6 @@ El motor jamás devuelve NaN/inf ni se "desconecta":
 
 ## Limitaciones
 
-- Modelo ideal a 0 K efectivo: sin ruido, sin eficiencia cuántica < 1, sin efectos de superficie ni temperatura.
-- La regresión sobre puntos calculados con la `h` conocida verifica el modelo; no es una medición independiente salvo que se añada incertidumbre documentada.
-- El voltaje solo modela bloqueo por frenado; no hay curva corriente-voltaje completa ni efectos espaciales de carga.
+- Modelo ideal a 0 K efectivo: sin efectos de superficie ni temperatura; la QE y el área son ilustrativas.
+- La regresión en modo ideal verifica el modelo; en modo experimental la incertidumbre es sintética (ruido uniforme documentado), no instrumental.
+- La rampa `g(V)` es lineal por simplicidad; no hay efectos espaciales de carga.

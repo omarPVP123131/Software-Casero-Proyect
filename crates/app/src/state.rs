@@ -68,6 +68,7 @@ pub enum LabTab {
     #[default]
     Cell,
     Chart,
+    Experiment,
     Compare,
     Log,
 }
@@ -273,7 +274,132 @@ pub struct PhysicsReadout {
     pub stopping_potential_v: Option<f64>,
     pub photon_flux_density_per_m2_s: Option<f64>,
     pub electron_max_speed_m_s: Option<f64>,
+    /// Fotocorriente estimada en amperios (modelo demo: `I = e·Φ·A·QE·g(V)`).
+    pub photocurrent_a: Option<f64>,
+    /// Fracción de colección 0..1 (rampa de frenado continua).
+    pub collection_factor: Option<f64>,
     pub kinetic_energy_curve: Vec<CurvePoint>,
+}
+
+/// Un punto medido del experimento V₀ contra f.
+///
+/// Guarda el V₀ ideal y el medido (con ruido si el modo experimental está
+/// activo). El ruido se genera una sola vez al capturar el punto, así el
+/// valor es estable entre frames.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentPoint {
+    pub wavelength_nm: f32,
+    pub frequency_hz: f64,
+    pub stopping_measured_v: f64,
+    pub stopping_ideal_v: f64,
+    pub material_name: String,
+    pub noise_percent: f32,
+}
+
+/// Estado del experimento V₀ contra f y su configuración.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentState {
+    pub points: Vec<ExperimentPoint>,
+    /// false = ideal (V₀ exacto), true = experimental (ruido ±`noise_percent` %).
+    pub experimental_mode: bool,
+    pub noise_percent: f32,
+    /// Semilla del generador determinista (estable entre frames).
+    pub next_seed: u64,
+    /// Último mensaje de captura/exportación para mostrar en la UI.
+    pub status: String,
+    /// Última ruta de exportación (para confirmar al usuario).
+    pub last_export_path: String,
+}
+
+impl Default for ExperimentState {
+    fn default() -> Self {
+        Self {
+            points: Vec::new(),
+            experimental_mode: false,
+            noise_percent: 2.0,
+            next_seed: 0x9E37_79B9_7F4A_7C15,
+            status: String::new(),
+            last_export_path: String::new(),
+        }
+    }
+}
+
+/// Máximo de puntos del experimento (suficiente para un buen ajuste).
+pub const MAX_EXPERIMENT_POINTS: usize = 24;
+
+impl ExperimentState {
+    /// Intenta registrar el punto actual. Falla con mensaje si no hay emisión
+    /// o si ya existe un punto con la misma λ (evita duplicados verticales).
+    pub fn try_add(
+        &mut self,
+        material: MaterialChoice,
+        wavelength_nm: f32,
+        frequency_hz: f64,
+        stopping_ideal_v: f64,
+        emits: bool,
+        noise_applied_v: f64,
+    ) -> Result<(), String> {
+        if !emits {
+            return Err("Sin emisión a esta λ (λ > λ₀): baja la longitud de onda.".to_owned());
+        }
+        if self.points.len() >= MAX_EXPERIMENT_POINTS {
+            return Err(format!(
+                "Tabla llena ({MAX_EXPERIMENT_POINTS} puntos). Quita alguno."
+            ));
+        }
+        // El ajuste V₀ = m·f + b supone un solo Φ: no mezclar materiales.
+        if let Some(first) = self.points.first() {
+            if first.material_name != material.name() {
+                return Err(format!(
+                    "La tabla es de {}: vacíala para medir otro material.",
+                    first.material_name
+                ));
+            }
+        }
+        let duplicate = self
+            .points
+            .iter()
+            .any(|p| (p.wavelength_nm - wavelength_nm).abs() < 0.5);
+        if duplicate {
+            return Err("Ya hay un punto con esa λ: cámbiala al menos 1 nm.".to_owned());
+        }
+        self.points.push(ExperimentPoint {
+            wavelength_nm,
+            frequency_hz,
+            stopping_measured_v: noise_applied_v,
+            stopping_ideal_v,
+            material_name: material.name().to_owned(),
+            noise_percent: if self.experimental_mode {
+                self.noise_percent
+            } else {
+                0.0
+            },
+        });
+        self.status = format!(
+            "Punto {} agregado: λ = {:.0} nm, V₀ = {:.3} V{}.",
+            self.points.len(),
+            wavelength_nm,
+            noise_applied_v,
+            if self.experimental_mode {
+                format!(" (ruido ±{:.1}%)", self.noise_percent)
+            } else {
+                " (ideal)".to_owned()
+            }
+        );
+        Ok(())
+    }
+
+    pub fn remove(&mut self, index: usize) {
+        if index < self.points.len() {
+            self.points.remove(index);
+            self.status = format!("Punto quitado. Quedan {}.", self.points.len());
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.points.clear();
+        self.status = "Tabla del experimento vaciada.".to_owned();
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -375,6 +501,7 @@ pub struct AppState {
     pub readout: PhysicsReadout,
     pub comparison_readout: PhysicsReadout,
     pub chart: ChartViewState,
+    pub experiment: ExperimentState,
     pub preferences: UiPreferences,
     pub active_tab: LabTab,
     pub animation_running: bool,
@@ -405,6 +532,7 @@ impl Default for AppState {
             readout: PhysicsReadout::default(),
             comparison_readout: PhysicsReadout::default(),
             chart: ChartViewState::default(),
+            experiment: ExperimentState::default(),
             preferences: UiPreferences::default(),
             active_tab: LabTab::Cell,
             animation_running: true,

@@ -16,6 +16,7 @@ pub struct LinearFitResult {
     pub intercept_b: f64,      // Intersección (V)
     pub h_experimental: f64,   // Constante de Planck estimada (J·s)
     pub error_percentage: f64, // Error porcentual comparado con el valor teórico
+    pub r_squared: f64,        // Bondad del ajuste 0..1 (1 = puntos colineales)
 }
 
 /// Realiza una regresión lineal sobre una lista de puntos (f, V0)
@@ -55,11 +56,33 @@ pub fn fit_planck_constant(points: &[DataPoint]) -> Option<LinearFitResult> {
     let h_theoretical = crate::constants::PLANCK_H;
     let error_percentage = ((h_experimental - h_theoretical).abs() / h_theoretical) * 100.0;
 
+    // R² = 1 - SSres/SStot. Con puntos colineales (datos ideales) → 1.
+    let mean_y = sum_y / n;
+    let mut ss_tot = 0.0;
+    let mut ss_res = 0.0;
+    for p in points {
+        let y = p.stopping_potential_v;
+        let y_fit = slope_m * p.frequency_hz + intercept_b;
+        ss_tot += (y - mean_y) * (y - mean_y);
+        ss_res += (y - y_fit) * (y - y_fit);
+    }
+    let r_squared = if ss_tot < 1e-30 {
+        // Todos los V₀ iguales: ajuste perfecto solo si no hay residuo.
+        if ss_res < 1e-30 {
+            1.0
+        } else {
+            0.0
+        }
+    } else {
+        (1.0 - ss_res / ss_tot).clamp(0.0, 1.0)
+    };
+
     Some(LinearFitResult {
         slope_m,
         intercept_b,
         h_experimental,
         error_percentage,
+        r_squared,
     })
 }
 
@@ -90,5 +113,25 @@ mod tests {
 
         // El error debe ser menor al 1% con datos ideales
         assert!(result.error_percentage < 1.0);
+        // Datos casi colineales → R² ≈ 1.
+        assert!(result.r_squared > 0.999);
+    }
+
+    #[test]
+    fn test_r_squared_is_one_for_perfect_line() {
+        // V₀ = m·f + b exacta con m = h/e real.
+        let m = crate::constants::PLANCK_H / crate::constants::ELEMENTARY_CHARGE_E;
+        let points: Vec<DataPoint> = (0..5)
+            .map(|i| {
+                let f = 6.0e14 + i as f64 * 5.0e13;
+                DataPoint {
+                    frequency_hz: f,
+                    stopping_potential_v: m * f - 2.0,
+                }
+            })
+            .collect();
+        let result = fit_planck_constant(&points).unwrap();
+        assert!((result.r_squared - 1.0).abs() < 1e-9);
+        assert!(result.error_percentage < 0.01);
     }
 }
