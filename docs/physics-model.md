@@ -50,6 +50,18 @@ Definidos en `crates/app/src/physics_adapter.rs`:
 - **Intensidad → flujo.** 100 % = 10 mW/cm² (100 W/m²). `flujo = P / E_fotón` en fotones/m²·s. La intensidad no cambia `Kmax` ni `V₀`; solo la cantidad de electrones y el brillo del haz.
 - **Colección → corriente.** Hay colección si hay emisión, intensidad > 0.1 % y `V_aplicado ≥ −V₀`. Un voltaje de frenado más negativo bloquea la llegada al ánodo sin alterar `Kmax`.
 - **Rampa de colección y fotocorriente (calibrable).** Para la curva I–V se usa `g(V)` continua: 1 con `V ≥ 0`, rampa lineal hasta 0 en `−V₀`. La corriente es `I = e·Φ·A·QE·g(V)` con área y QE editables en Controles (por defecto 1 cm² y 1 %); cita la fuente de tu cátodo para rigor.
+
+## Calibración de la fotocorriente
+
+Presets de la UI (botones en Controles → Modelo de corriente):
+
+| Preset | QE | Fuente |
+|---|---|---|
+| Demo | 1 % | Valor ilustrativo, sin fuente. Para jugar, no para citar. |
+| Bialcali K2CsSb | 25 % @ ~400 nm | Hamamatsu PMT Handbook (fotocátodo bialcalino estándar); pico > 20 % @ 3 eV en Yamaguchi et al., arXiv:1802.09735. |
+| Multialcali Na2KSb:Cs | 20 % | Hamamatsu PMT Handbook (pico con respuesta extendida al rojo). |
+
+El área emisora no tiene preset: mide tu cátodo (por defecto 1 cm²) y anota la fuente en las notas de la sesión.
 - **Llegada estocástica (solo visual).** El conteo de electrones fluctúa ±1 dos veces por segundo y cada partícula lleva un desfase propio, determinista en (tiempo, λ). El valor medio (corriente, Kmax) no fluctúa.
 - **Ruido experimental.** Modo experimental: `V₀` medido = ideal × (1 ± ruido) con ruido uniforme determinista (splitmix64, generado una vez por punto). El modo ideal verifica el modelo (R² ≈ 1); el experimental lo mide con dispersión.
 - **Ajuste.** Regresión `V₀ = m·f + b` con `h = e·m`, error % vs teórica y `R² = 1 − SS_res/SS_tot`.

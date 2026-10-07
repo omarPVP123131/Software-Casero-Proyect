@@ -5,7 +5,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::{AppState, ExperimentPoint, LabTab, SavedFit, UiPreferences};
+use crate::state::{
+    AppState, ExperimentControls, ExperimentPoint, LabTab, MaterialChoice, SavedFit, UiPreferences,
+};
 
 /// Subconjunto serializable del experimento: puntos, modo, semilla y ajustes.
 /// El estado efímero (mensajes, última ruta, selección, zoom) no se guarda.
@@ -21,10 +23,38 @@ struct PersistedExperiment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+struct PersistedControls {
+    material: MaterialChoice,
+    comparison_material: MaterialChoice,
+    wavelength_nm: f32,
+    intensity_percent: f32,
+    applied_voltage_v: f32,
+    cathode_area_cm2: f32,
+    quantum_efficiency_percent: f32,
+}
+
+impl Default for PersistedControls {
+    fn default() -> Self {
+        let controls = ExperimentControls::default();
+        Self {
+            material: controls.material,
+            comparison_material: controls.comparison_material,
+            wavelength_nm: controls.wavelength_nm,
+            intensity_percent: controls.intensity_percent,
+            applied_voltage_v: controls.applied_voltage_v,
+            cathode_area_cm2: controls.cathode_area_cm2,
+            quantum_efficiency_percent: controls.quantum_efficiency_percent,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 struct PersistedUi {
     version: u32,
     preferences: UiPreferences,
     active_tab: LabTab,
+    controls: PersistedControls,
     experiment: PersistedExperiment,
     notes: String,
 }
@@ -35,6 +65,7 @@ impl Default for PersistedUi {
             version: 1,
             preferences: UiPreferences::default(),
             active_tab: LabTab::Cell,
+            controls: PersistedControls::default(),
             experiment: PersistedExperiment::default(),
             notes: String::new(),
         }
@@ -46,6 +77,15 @@ fn snapshot_of(state: &AppState) -> PersistedUi {
         version: 1,
         preferences: state.preferences.clone(),
         active_tab: state.active_tab,
+        controls: PersistedControls {
+            material: state.controls.material,
+            comparison_material: state.controls.comparison_material,
+            wavelength_nm: state.controls.wavelength_nm,
+            intensity_percent: state.controls.intensity_percent,
+            applied_voltage_v: state.controls.applied_voltage_v,
+            cathode_area_cm2: state.controls.cathode_area_cm2,
+            quantum_efficiency_percent: state.controls.quantum_efficiency_percent,
+        },
         experiment: PersistedExperiment {
             points: state.experiment.points.clone(),
             experimental_mode: state.experiment.experimental_mode,
@@ -55,6 +95,25 @@ fn snapshot_of(state: &AppState) -> PersistedUi {
         },
         notes: state.notes.clone(),
     }
+}
+
+/// Aplica un snapshot al estado (ruta real que usa `restore`, testeable).
+fn apply_snapshot(state: &mut AppState, snapshot: &PersistedUi) {
+    state.preferences = snapshot.preferences.clone();
+    state.active_tab = snapshot.active_tab;
+    state.controls.material = snapshot.controls.material;
+    state.controls.comparison_material = snapshot.controls.comparison_material;
+    state.controls.wavelength_nm = snapshot.controls.wavelength_nm;
+    state.controls.intensity_percent = snapshot.controls.intensity_percent;
+    state.controls.applied_voltage_v = snapshot.controls.applied_voltage_v;
+    state.controls.cathode_area_cm2 = snapshot.controls.cathode_area_cm2;
+    state.controls.quantum_efficiency_percent = snapshot.controls.quantum_efficiency_percent;
+    state.experiment.points = snapshot.experiment.points.clone();
+    state.experiment.experimental_mode = snapshot.experiment.experimental_mode;
+    state.experiment.noise_percent = snapshot.experiment.noise_percent;
+    state.experiment.next_seed = snapshot.experiment.next_seed;
+    state.experiment.saved_fits = snapshot.experiment.saved_fits.clone();
+    state.notes = snapshot.notes.clone();
 }
 
 #[derive(Debug, Default)]
@@ -85,14 +144,7 @@ impl UiPersistence {
         if snapshot.version != 1 {
             return persistence;
         }
-        state.preferences = snapshot.preferences;
-        state.active_tab = snapshot.active_tab;
-        state.experiment.points = snapshot.experiment.points;
-        state.experiment.experimental_mode = snapshot.experiment.experimental_mode;
-        state.experiment.noise_percent = snapshot.experiment.noise_percent;
-        state.experiment.next_seed = snapshot.experiment.next_seed;
-        state.experiment.saved_fits = snapshot.experiment.saved_fits;
-        state.notes = snapshot.notes;
+        apply_snapshot(state, &snapshot);
         state.scene_camera.zoom = state.preferences.zoom;
         state.scene_camera.target_zoom = state.preferences.zoom;
         state.scene_camera.pan_x = 0.0;
@@ -161,7 +213,9 @@ fn config_path() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PersistedExperiment, PersistedUi, UiPreferences};
+    use super::{
+        apply_snapshot, PersistedControls, PersistedExperiment, PersistedUi, UiPreferences,
+    };
     use crate::state::{LabTab, LayoutPreset};
 
     #[test]
@@ -232,5 +286,54 @@ mod tests {
         assert_eq!(decoded.active_tab, LabTab::Experiment);
         assert!(decoded.experiment.points.is_empty());
         assert!(decoded.notes.is_empty());
+    }
+
+    #[test]
+    fn controls_round_trip_and_restore() {
+        use crate::state::{AppState, MaterialChoice};
+        let snapshot = PersistedUi {
+            controls: PersistedControls {
+                material: MaterialChoice::Potassium,
+                comparison_material: MaterialChoice::Platinum,
+                wavelength_nm: 300.0,
+                intensity_percent: 70.0,
+                applied_voltage_v: -2.0,
+                cathode_area_cm2: 2.5,
+                quantum_efficiency_percent: 25.0,
+            },
+            ..PersistedUi::default()
+        };
+        let encoded = serde_json::to_string(&snapshot).unwrap();
+        let decoded: PersistedUi = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded.controls.material, MaterialChoice::Potassium);
+        assert_eq!(decoded.controls.wavelength_nm, 300.0);
+        assert_eq!(decoded.controls.quantum_efficiency_percent, 25.0);
+
+        // Archivos sin "controls" migran a los defaults del experimento.
+        let legacy: PersistedUi =
+            serde_json::from_str(r#"{"version":1,"active_tab":"cell"}"#).unwrap();
+        assert_eq!(
+            legacy.controls.wavelength_nm,
+            crate::state::ExperimentControls::default().wavelength_nm
+        );
+
+        // La ruta real: snapshot → estado, como hace restore().
+        let mut app = AppState::default();
+        apply_snapshot(&mut app, &decoded);
+        assert_eq!(app.controls.material, MaterialChoice::Potassium);
+        assert_eq!(app.controls.wavelength_nm, 300.0);
+        app.refresh_physics();
+        assert_eq!(app.readout.emission_possible, Some(true));
+    }
+
+    #[test]
+    fn cathode_presets_hold_documented_efficiencies() {
+        use crate::state::CathodePreset;
+        assert_eq!(CathodePreset::Bialkali.quantum_efficiency_percent(), 25.0);
+        assert_eq!(
+            CathodePreset::Multialkali.quantum_efficiency_percent(),
+            20.0
+        );
+        assert_eq!(CathodePreset::Demo.quantum_efficiency_percent(), 1.0);
     }
 }

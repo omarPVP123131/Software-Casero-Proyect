@@ -14,9 +14,9 @@ pub use physics_adapter::{
     electron_speed_scale, photoelectron_strength, refresh_state, REFERENCE_IRRADIANCE_W_M2,
 };
 pub use state::{
-    AppState, CurvePoint, DockPanel, ExperimentControls, ExperimentPoint, ExperimentState,
-    HistoryEntry, InspectedObject, LabTab, LayoutPreset, MaterialChoice, PhysicsReadout, SavedFit,
-    Scenario, MAX_EXPERIMENT_POINTS,
+    AppState, CathodePreset, CurvePoint, DockPanel, ExperimentControls, ExperimentPoint,
+    ExperimentState, HistoryEntry, InspectedObject, LabTab, LayoutPreset, MaterialChoice,
+    PhysicsReadout, SavedFit, Scenario, MAX_EXPERIMENT_POINTS,
 };
 
 /// Región del canvas que `engine` debe dibujar después de construir la UI.

@@ -6,9 +6,11 @@
 use fotoelectrico_engine::RenderStats;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum MaterialChoice {
     Potassium,
+    #[default]
     Sodium,
     Calcium,
     Zinc,
@@ -122,6 +124,48 @@ impl Scenario {
                 cathode_area_cm2: 1.0,
                 quantum_efficiency_percent: 1.0,
             },
+        }
+    }
+}
+
+/// Presets de calibración de la fotocorriente (solo fijan la eficiencia
+/// cuántica; el área depende de tu montaje y se ajusta con el slider).
+/// Fuentes en `docs/physics-model.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CathodePreset {
+    Demo,
+    Bialkali,
+    Multialkali,
+}
+
+impl CathodePreset {
+    pub const ALL: [Self; 3] = [Self::Demo, Self::Bialkali, Self::Multialkali];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Demo => "Demo 1%",
+            Self::Bialkali => "Bialcali 25%",
+            Self::Multialkali => "Multialcali 20%",
+        }
+    }
+
+    pub const fn quantum_efficiency_percent(self) -> f32 {
+        match self {
+            Self::Demo => 1.0,
+            Self::Bialkali => 25.0,
+            Self::Multialkali => 20.0,
+        }
+    }
+
+    pub const fn detail(self) -> &'static str {
+        match self {
+            Self::Demo => "QE 1 % ilustrativa, sin fuente. Para jugar, no para citar.",
+            Self::Bialkali => {
+                "K2CsSb, pico ≈ 25 % @ ~400 nm. Hamamatsu PMT Handbook; pico > 20 % @ 3 eV (Yamaguchi et al. 2019)."
+            }
+            Self::Multialkali => {
+                "Na2KSb:Cs, pico ≈ 20 % con respuesta extendida al rojo. Hamamatsu PMT Handbook."
+            }
         }
     }
 }

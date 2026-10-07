@@ -683,6 +683,18 @@ fn draw_control_panel(
             ui.separator();
             ui.label(RichText::new("Modelo de corriente (calibrable)").strong().color(palette.text));
             ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                for preset in crate::state::CathodePreset::ALL {
+                    if ui
+                        .button(preset.label())
+                        .on_hover_text(preset.detail())
+                        .clicked()
+                    {
+                        state.controls.quantum_efficiency_percent =
+                            preset.quantum_efficiency_percent();
+                    }
+                }
+            });
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Área del cátodo").strong().color(palette.text));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

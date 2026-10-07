@@ -12,7 +12,7 @@ Estado real a octubre de 2026. Solo se marca hecho lo que compila, pasa pruebas 
 
 ## Pendiente
 
-- [ ] Calibrar QE/área contra un cátodo real documentado (hoy editables, por defecto 1 cm² y 1 %).
+- [ ] Calibrar área contra un cátodo real documentado (la QE ya tiene presets con fuente).
 - [ ] Capturas de demo en `docs/demo-*.png` + prueba de humo (protocolo en `docs/demo-checklist.md`).
 
 ## Historial

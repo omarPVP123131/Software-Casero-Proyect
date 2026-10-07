@@ -6,9 +6,11 @@
 - **Longitud de onda (180–900 nm).** Fija `f = c/λ` y `E = hf`. Barrer de UV a IR cruza el umbral de cada material.
 - **Intensidad (%).** Fija el flujo de fotones (100 % = 10 mW/cm²). Subirla aumenta electrones y brillo, nunca `Kmax`.
 - **Voltaje aplicado (−5…+5 V).** Si es más negativo que `−V₀`, la colección se bloquea: verás “Colección: No · bloqueada” y cero electrones, con el mismo `Kmax`.
-- **Modelo de corriente.** Área del cátodo (cm²) y eficiencia cuántica (%) calibran la fotocorriente `I = e·Φ·A·QE·g(V)`.
+- **Modelo de corriente.** Área del cátodo (cm²) y eficiencia cuántica (%) calibran la fotocorriente `I = e·Φ·A·QE·g(V)`. Los botones Demo / Bialcali / Multialcali fijan la QE con fuente citada (ver calibración en el modelo físico).
 - **Escenarios de demo.** “Cruzar el umbral”, “Frenado total” y “K frente a Pt” ajustan varios controles de un clic.
 - **Comparación.** Segundo material evaluado con la misma `λ` e intensidad.
+
+Tus controles (material, `λ`, intensidad, voltaje, área y QE) se guardan al cerrar y se restauran al abrir, igual que la tabla del experimento y las notas.
 
 ## Pestañas
 
