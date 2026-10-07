@@ -1,6 +1,8 @@
-[package]
-name = "software-casero"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = ["crates/physics", "crates/engine", "crates/app"]
+default-members = ["crates/app"]
+resolver = "2"
 
-[dependencies]
+[workspace.package]
+edition = "2021"
+license = "MIT"

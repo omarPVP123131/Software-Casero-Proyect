@@ -1,0 +1,9 @@
+[package]
+name = "fotoelectrico-engine"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Motor gráfico del simulador fotoeléctrico"
+
+[dependencies]
+macroquad = { version = "0.4.16", default-features = false }

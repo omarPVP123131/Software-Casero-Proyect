@@ -1,0 +1,6 @@
+[package]
+name = "fotoelectrico-physics"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Núcleo físico pendiente de implementación"
