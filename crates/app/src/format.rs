@@ -167,6 +167,21 @@ pub fn percent(value: Option<f64>) -> Option<String> {
     })
 }
 
+/// Valor con signo y unidad (`−2.36 V`). Para magnitudes que pueden ser
+/// negativas, como la ordenada del ajuste V0 = m·f + b.
+pub fn signed(value: Option<f64>, decimals: usize, unit: &str) -> Option<String> {
+    value.map(|v| {
+        if !v.is_finite() {
+            return "—".to_owned();
+        }
+        if v == 0.0 {
+            return format!("{:.decimals$}{unit}", 0.0);
+        }
+        let sign = if v < 0.0 { "−" } else { "" };
+        format!("{sign}{:.decimals$}{unit}", v.abs())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +222,13 @@ mod tests {
             Some("6.63×10⁻³⁴ J·s")
         );
         assert_eq!(slope(Some(4.14e-15)).as_deref(), Some("4.14×10⁻¹⁵ V·s"));
+    }
+
+    #[test]
+    fn signed_keeps_negative_values_visible() {
+        // La ordenada b ≈ −Φ/e es negativa: jamás debe mostrar "—".
+        assert_eq!(signed(Some(-2.36), 2, " V").as_deref(), Some("−2.36 V"));
+        assert_eq!(signed(Some(0.5), 2, " V").as_deref(), Some("0.50 V"));
+        assert_eq!(signed(Some(f64::NAN), 2, " V").as_deref(), Some("—"));
     }
 }

@@ -776,6 +776,51 @@ fn section_title(ui: &mut egui::Ui, title: &str, detail: &str, palette: Palette)
     ui.label(RichText::new(detail).small().color(palette.muted));
 }
 
+/// Encabezado de sección plano: título + regla fina, sin cajas.
+/// Es el estilo de la pestaña Experimento: editorial, no tarjetas.
+fn section_rule(ui: &mut egui::Ui, title: &str, palette: Palette) {
+    ui.add_space(6.0);
+    ui.label(RichText::new(title).size(10.0).strong().color(palette.text));
+    ui.separator();
+    ui.add_space(2.0);
+}
+
+/// Celda numérica de tabla: monoespaciada y alineada a la derecha para que
+/// las cifras no bailen entre filas. El hover muestra la fuente LaTeX.
+fn data_cell(ui: &mut egui::Ui, text: String, color: Color32, latex: &str) {
+    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        let response = ui.label(RichText::new(text).monospace().color(color));
+        if !latex.is_empty() {
+            response.on_hover_text(format!("LaTeX: {latex}"));
+        }
+    });
+}
+
+/// Fila de la tabla de ajuste: parámetro | valor (der., mono) | fórmula tenue.
+fn fit_value_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: Option<String>,
+    color: Color32,
+    formula: math::Formula,
+    palette: Palette,
+) {
+    ui.label(RichText::new(label).color(palette.text));
+    data_cell(
+        ui,
+        value.unwrap_or_else(|| "—".to_owned()),
+        color,
+        formula.latex,
+    );
+    ui.label(
+        RichText::new(formula.rendered)
+            .monospace()
+            .small()
+            .color(palette.muted),
+    );
+    ui.end_row();
+}
+
 fn material_combo(ui: &mut egui::Ui, id: &'static str, material: &mut MaterialChoice) {
     egui::ComboBox::from_id_salt(id)
         .selected_text(format!("{} ({})", material.name(), material.symbol()))
@@ -1528,123 +1573,92 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
             .small()
             .color(palette.muted),
     );
-    ui.add_space(8.0);
 
     // ---- 1. Modo de medición ----
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new("MODO DE MEDICIÓN")
-                    .size(9.0)
-                    .strong()
-                    .color(palette.muted),
+    section_rule(ui, "Modo de medición", palette);
+    ui.horizontal_wrapped(|ui| {
+        ui.selectable_value(&mut state.experiment.experimental_mode, false, "Ideal")
+            .on_hover_text("V0 exacto del modelo.");
+        ui.selectable_value(
+            &mut state.experiment.experimental_mode,
+            true,
+            "Experimental",
+        )
+        .on_hover_text("V0 con ruido de medición.");
+        if state.experiment.experimental_mode {
+            ui.add(
+                egui::Slider::new(&mut state.experiment.noise_percent, 0.0..=10.0).text("ruido ±%"),
             );
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                ui.selectable_value(
-                    &mut state.experiment.experimental_mode,
-                    false,
-                    "Ideal",
-                )
-                .on_hover_text("V0 exacto del modelo.");
-                ui.selectable_value(
-                    &mut state.experiment.experimental_mode,
-                    true,
-                    "Experimental",
-                )
-                .on_hover_text("V0 con ruido de medición.");
-                if state.experiment.experimental_mode {
-                    ui.add(
-                        egui::Slider::new(&mut state.experiment.noise_percent, 0.0..=10.0)
-                            .text("ruido ±%"),
-                    );
-                }
-            });
-            ui.label(
-                RichText::new(if state.experiment.experimental_mode {
-                    "Con ruido, el ajuste estima h con error y R² < 1: es una medición, no una verificación."
-                } else {
-                    "Sin ruido, el ajuste devuelve la h del modelo (error ≈ 0, R² ≈ 1): verifica el modelo."
-                })
-                .small()
-                .color(palette.muted),
-            );
-        });
-    ui.add_space(8.0);
-
+        }
+    });
+    ui.label(
+        RichText::new(if state.experiment.experimental_mode {
+            "Con ruido, el ajuste estima h con error y R² < 1: es una medición, no una verificación."
+        } else {
+            "Sin ruido, el ajuste devuelve la h del modelo (error ≈ 0, R² ≈ 1): verifica el modelo."
+        })
+        .small()
+        .color(palette.muted),
+    );
     // ---- 2. Captura del punto actual ----
     let lambda = state.controls.wavelength_nm;
     let freq = state.readout.frequency_hz.unwrap_or(0.0);
     let v0_ideal = state.readout.stopping_potential_v.unwrap_or(0.0);
     let emits = state.readout.emission_possible.unwrap_or(false);
     let material = state.controls.material;
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new("CAPTURA")
-                    .size(9.0)
-                    .strong()
-                    .color(palette.muted),
-            );
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(format!(
-                    "Actual: {} · λ = {:.0} nm · f = {} · V0 = {:.3} V",
-                    material.name(),
-                    lambda,
-                    format::scientific(freq, 2),
-                    v0_ideal
-                ))
-                .color(palette.text),
-            );
-            ui.add_space(4.0);
-            let can_add = emits;
-            if ui
-                .add_enabled(can_add, egui::Button::new("Agregar punto actual (f, V0)"))
-                .on_hover_text("Registra la frecuencia y el V0 actuales en la tabla.")
-                .clicked()
+    section_rule(ui, "Punto actual", palette);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(format!(
+                "{} · λ = {:.0} nm · f = {} · V0 = {:.3} V",
+                material.name(),
+                lambda,
+                format::scientific(freq, 2),
+                v0_ideal
+            ))
+            .monospace()
+            .color(palette.text),
+        );
+    });
+    ui.add_space(2.0);
+    ui.horizontal_wrapped(|ui| {
+        let can_add = emits;
+        if ui
+            .add_enabled(can_add, egui::Button::new("Agregar punto (f, V0)"))
+            .on_hover_text("Registra la frecuencia y el V0 actuales en la tabla.")
+            .clicked()
+        {
+            let noise = if state.experiment.experimental_mode {
+                state.experiment.noise_percent
+            } else {
+                0.0
+            };
+            let measured = noisy_stopping_v(v0_ideal, noise, &mut state.experiment.next_seed);
+            match state
+                .experiment
+                .try_add(material, lambda, freq, v0_ideal, emits, measured)
             {
-                let noise = if state.experiment.experimental_mode {
-                    state.experiment.noise_percent
-                } else {
-                    0.0
-                };
-                let measured = noisy_stopping_v(v0_ideal, noise, &mut state.experiment.next_seed);
-                match state
-                    .experiment
-                    .try_add(material, lambda, freq, v0_ideal, emits, measured)
-                {
-                    Ok(()) => {
-                        let msg = state.experiment.status.clone();
-                        state.push_history(msg);
-                    }
-                    Err(msg) => state.experiment.status = msg,
+                Ok(()) => {
+                    let msg = state.experiment.status.clone();
+                    state.push_history(msg);
                 }
+                Err(msg) => state.experiment.status = msg,
             }
-            if !emits {
-                ui.label(
-                    RichText::new("Sin emisión a esta λ: baja la longitud de onda para medir.")
-                        .small()
-                        .color(palette.amber),
-                );
-            }
-            if !state.experiment.status.is_empty() {
-                ui.label(
-                    RichText::new(&state.experiment.status)
-                        .small()
-                        .color(palette.cyan),
-                );
-            }
-        });
-    ui.add_space(8.0);
+        }
+        if !emits {
+            ui.label(
+                RichText::new("Sin emisión a esta λ: baja la longitud de onda para medir.")
+                    .small()
+                    .color(palette.amber),
+            );
+        } else if !state.experiment.status.is_empty() {
+            ui.label(
+                RichText::new(&state.experiment.status)
+                    .small()
+                    .color(palette.cyan),
+            );
+        }
+    });
 
     // ---- 3. Ajuste V0 = m·f + b ----
     let data: Vec<DataPoint> = state
@@ -1657,206 +1671,239 @@ fn draw_experiment_tab(ui: &mut egui::Ui, state: &mut AppState, palette: Palette
         })
         .collect();
     let fit = fit_planck_constant(&data);
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new(format!("AJUSTE · {} PUNTOS", data.len()))
-                    .size(9.0)
-                    .strong()
-                    .color(palette.muted),
-            );
-            ui.add_space(4.0);
-            match fit.as_ref() {
-                Some(result) => {
-                    metric_row(ui, "Pendiente m", format::slope(Some(result.slope_m)), palette.cyan, "Pendiente de V0 = m·f + b.", math::FIT_LINE, palette);
-                    metric_row(ui, "Ordenada b", format::volts(Some(result.intercept_b)), palette.cyan, "b ≈ −Φ/e del material.", math::FIT_LINE, palette);
-                    metric_row(ui, "h estimada", format::planck(Some(result.h_experimental)), palette.green, "h = e·m a partir del ajuste.", math::PLANCK_FIT, palette);
-                    metric_row(ui, "Error vs teórica", format::percent(Some(result.error_percentage)), palette.amber, "Comparada con h = 6.62607015×10⁻³⁴ J·s.", math::PLANCK_FIT, palette);
-                    metric_row(ui, "R²", Some(format!("{:.4}", result.r_squared)), palette.violet, "1 = puntos colineales.", math::RSQUARED, palette);
-                    ui.label(
-                        RichText::new(if state.experiment.experimental_mode {
-                            "Medición con ruido: el error y R² dependen de tu muestra."
-                        } else {
-                            "Datos ideales: error ≈ 0 porque los puntos salen del mismo modelo."
-                        })
-                        .small()
-                        .color(palette.muted),
+    section_rule(
+        ui,
+        &format!("Ajuste V0 = m·f + b · {} puntos", data.len()),
+        palette,
+    );
+    match fit.as_ref() {
+        Some(result) => {
+            egui::Grid::new("experiment-fit-table")
+                .striped(true)
+                .num_columns(3)
+                .show(ui, |ui| {
+                    for header in ["Parámetro", "Valor", "Fórmula"] {
+                        ui.label(RichText::new(header).strong().color(palette.text));
+                    }
+                    ui.end_row();
+                    fit_value_row(
+                        ui,
+                        "Pendiente m",
+                        format::slope(Some(result.slope_m)),
+                        palette.cyan,
+                        math::FIT_LINE,
+                        palette,
                     );
-                }
-                None => {
+                    fit_value_row(
+                        ui,
+                        "Ordenada b",
+                        format::signed(Some(result.intercept_b), 2, " V"),
+                        palette.cyan,
+                        math::FIT_LINE,
+                        palette,
+                    );
+                    fit_value_row(
+                        ui,
+                        "h estimada",
+                        format::planck(Some(result.h_experimental)),
+                        palette.green,
+                        math::PLANCK_FIT,
+                        palette,
+                    );
+                    fit_value_row(
+                        ui,
+                        "Error vs teórica",
+                        format::percent(Some(result.error_percentage)),
+                        palette.amber,
+                        math::PLANCK_FIT,
+                        palette,
+                    );
+                    ui.label(RichText::new("R²").color(palette.muted));
+                    data_cell(
+                        ui,
+                        format!("{:.4}", result.r_squared),
+                        palette.violet,
+                        math::RSQUARED.latex,
+                    );
                     ui.label(
-                        RichText::new("Agrega al menos 2 puntos con distinta frecuencia para ajustar la recta.")
+                        RichText::new(math::RSQUARED.rendered)
+                            .monospace()
                             .small()
                             .color(palette.muted),
                     );
-                }
-            }
-        });
-    ui.add_space(8.0);
+                    ui.end_row();
+                });
+            ui.label(
+                RichText::new(if state.experiment.experimental_mode {
+                    "Medición con ruido: el error y R² dependen de tu muestra."
+                } else {
+                    "Datos ideales: error ≈ 0 porque los puntos salen del mismo modelo."
+                })
+                .small()
+                .color(palette.muted),
+            );
+        }
+        None => {
+            ui.label(
+                RichText::new(
+                    "Agrega al menos 2 puntos con distinta frecuencia para ajustar la recta.",
+                )
+                .small()
+                .color(palette.muted),
+            );
+        }
+    }
 
     // ---- 4. Gráfica V0–f ----
     draw_fit_plot(ui, &state.experiment.points, fit.as_ref(), palette);
     ui.add_space(8.0);
 
     // ---- 5. Tabla de puntos ----
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("TABLA DE PUNTOS")
-                        .size(9.0)
-                        .strong()
-                        .color(palette.muted),
-                );
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+    section_rule(
+        ui,
+        &format!("Tabla de puntos · {}", state.experiment.points.len()),
+        palette,
+    );
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .small_button("Vaciar tabla")
+            .on_hover_text("Borra todos los puntos.")
+            .clicked()
+        {
+            state.experiment.clear();
+            state.push_history("Tabla del experimento vaciada");
+        }
+    });
+    ui.add_space(2.0);
+    if state.experiment.points.is_empty() {
+        ui.label(
+            RichText::new("Sin puntos: captura el (f, V0) actual para empezar.")
+                .small()
+                .color(palette.muted),
+        );
+    } else {
+        let mut to_remove: Option<usize> = None;
+        egui::Grid::new("experiment-points-table")
+            .striped(true)
+            .num_columns(6)
+            .show(ui, |ui| {
+                for header in ["n", "λ (nm)", "f (Hz)", "V0 med (V)", "mat", ""] {
+                    ui.label(RichText::new(header).strong().color(palette.text));
+                }
+                ui.end_row();
+                for (i, p) in state.experiment.points.iter().enumerate() {
+                    data_cell(ui, format!("{}", i + 1), palette.muted, "");
+                    data_cell(ui, format!("{:.0}", p.wavelength_nm), palette.text, "");
+                    data_cell(ui, format::scientific(p.frequency_hz, 1), palette.text, "");
+                    data_cell(
+                        ui,
+                        format!("{:.3}", p.stopping_measured_v),
+                        palette.amber,
+                        r"$V_0$ medido",
+                    );
+                    ui.label(RichText::new(p.material_name.clone()).color(palette.text));
                     if ui
-                        .small_button("Vaciar")
-                        .on_hover_text("Borra todos los puntos.")
+                        .small_button("✕")
+                        .on_hover_text("Quitar punto.")
                         .clicked()
                     {
-                        state.experiment.clear();
-                        state.push_history("Tabla del experimento vaciada");
+                        to_remove = Some(i);
                     }
-                });
-            });
-            ui.add_space(4.0);
-            if state.experiment.points.is_empty() {
-                ui.label(
-                    RichText::new("Sin puntos: captura el (f, V0) actual para empezar.")
-                        .small()
-                        .color(palette.muted),
-                );
-            } else {
-                let mut to_remove: Option<usize> = None;
-                egui::Grid::new("experiment-points-table")
-                    .striped(true)
-                    .num_columns(6)
-                    .show(ui, |ui| {
-                        for header in ["n", "λ (nm)", "f (Hz)", "V0 med (V)", "mat", ""] {
-                            ui.label(RichText::new(header).strong().color(palette.text));
-                        }
-                        ui.end_row();
-                        for (i, p) in state.experiment.points.iter().enumerate() {
-                            ui.label(format!("{}", i + 1));
-                            ui.label(format!("{:.0}", p.wavelength_nm));
-                            ui.label(format::scientific(p.frequency_hz, 1));
-                            ui.label(format!("{:.3}", p.stopping_measured_v));
-                            ui.label(p.material_name.clone());
-                            if ui
-                                .small_button("✕")
-                                .on_hover_text("Quitar punto.")
-                                .clicked()
-                            {
-                                to_remove = Some(i);
-                            }
-                            ui.end_row();
-                        }
-                    });
-                if let Some(i) = to_remove {
-                    state.experiment.remove(i);
+                    ui.end_row();
                 }
-            }
-        });
-    ui.add_space(8.0);
+            });
+        if let Some(i) = to_remove {
+            state.experiment.remove(i);
+        }
+    }
 
     // ---- 6. Fotocorriente y curva I–V ----
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new("FOTOCORRIENTE I–V")
-                    .size(9.0)
-                    .strong()
-                    .color(palette.muted),
-            );
-            ui.add_space(4.0);
-            metric_row(ui, "Corriente actual", format::current(state.readout.photocurrent_a), palette.green, "I = e·Φ·A·QE·g(V) con A = 1 cm² y QE = 1% (demo).", math::PHOTOCURRENT, palette);
-            draw_iv_plot(ui, state, palette);
-            ui.label(
-                RichText::new("Saturación con V ≥ 0, rampa lineal hasta −V0. Mueve el voltaje y mira el marcador.")
-                    .small()
-                    .color(palette.muted),
-            );
-        });
-    ui.add_space(8.0);
+    section_rule(ui, "Fotocorriente I–V", palette);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new("Corriente actual").color(palette.muted));
+        ui.label(
+            RichText::new(
+                format::current(state.readout.photocurrent_a).unwrap_or_else(|| "—".to_owned()),
+            )
+            .size(18.0)
+            .strong()
+            .monospace()
+            .color(palette.green),
+        );
+        ui.label(
+            RichText::new(math::PHOTOCURRENT.rendered)
+                .monospace()
+                .small()
+                .color(palette.muted),
+        )
+        .on_hover_text(format!(
+            "I = e·Φ·A·QE·g(V). Calibra A y QE en Controles.\nLaTeX: {}",
+            math::PHOTOCURRENT.latex
+        ));
+    });
+    ui.add_space(4.0);
+    draw_iv_plot(ui, state, palette);
+    ui.label(
+        RichText::new(
+            "Saturación con V ≥ 0, rampa lineal hasta −V0. Mueve el voltaje y mira el marcador.",
+        )
+        .small()
+        .color(palette.muted),
+    );
 
     // ---- 7. Exportar ----
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new("EXPORTAR")
-                    .size(9.0)
-                    .strong()
-                    .color(palette.muted),
-            );
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                if ui
-                    .button("Guardar CSV del experimento")
-                    .on_hover_text("Guarda la tabla (f, V0) con unidades.")
-                    .clicked()
-                {
-                    let csv = experiment_csv(&state.experiment.points);
-                    match save_text_file("experimento_v0_f.csv", &csv) {
-                        Ok(path) => {
-                            state.experiment.last_export_path = path.clone();
-                            state.experiment.status = format!("CSV guardado en {path}.");
-                            state.push_history("CSV del experimento exportado");
-                        }
-                        Err(msg) => state.experiment.status = msg,
-                    }
+    section_rule(ui, "Exportar", palette);
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .button("Guardar CSV del experimento")
+            .on_hover_text("Guarda la tabla (f, V0) con unidades.")
+            .clicked()
+        {
+            let csv = experiment_csv(&state.experiment.points);
+            match save_text_file("experimento_v0_f.csv", &csv) {
+                Ok(path) => {
+                    state.experiment.last_export_path = path.clone();
+                    state.experiment.status = format!("CSV guardado en {path}.");
+                    state.push_history("CSV del experimento exportado");
                 }
-                if ui
-                    .button("Copiar CSV")
-                    .on_hover_text("Copia la tabla al portapapeles.")
-                    .clicked()
-                {
-                    let csv = experiment_csv(&state.experiment.points);
-                    ui.ctx().copy_text(csv);
-                    state.experiment.status = "CSV copiado al portapapeles.".to_owned();
-                }
-                if ui
-                    .button("Guardar sesión completa")
-                    .on_hover_text("Parámetros, lecturas, curva, puntos y notas.")
-                    .clicked()
-                {
-                    let csv = session_csv(state);
-                    match save_text_file("sesion_fotoelectrico.csv", &csv) {
-                        Ok(path) => {
-                            state.experiment.last_export_path = path.clone();
-                            state.experiment.status = format!("Sesión guardada en {path}.");
-                            state.push_history("Sesión completa exportada");
-                        }
-                        Err(msg) => state.experiment.status = msg,
-                    }
-                }
-            });
-            if !state.experiment.last_export_path.is_empty() {
-                ui.label(
-                    RichText::new(format!(
-                        "Último archivo: {}",
-                        state.experiment.last_export_path
-                    ))
-                    .small()
-                    .color(palette.muted),
-                );
+                Err(msg) => state.experiment.status = msg,
             }
-        });
+        }
+        if ui
+            .button("Copiar CSV")
+            .on_hover_text("Copia la tabla al portapapeles.")
+            .clicked()
+        {
+            let csv = experiment_csv(&state.experiment.points);
+            ui.ctx().copy_text(csv);
+            state.experiment.status = "CSV copiado al portapapeles.".to_owned();
+        }
+        if ui
+            .button("Guardar sesión completa")
+            .on_hover_text("Parámetros, lecturas, curva, puntos y notas.")
+            .clicked()
+        {
+            let csv = session_csv(state);
+            match save_text_file("sesion_fotoelectrico.csv", &csv) {
+                Ok(path) => {
+                    state.experiment.last_export_path = path.clone();
+                    state.experiment.status = format!("Sesión guardada en {path}.");
+                    state.push_history("Sesión completa exportada");
+                }
+                Err(msg) => state.experiment.status = msg,
+            }
+        }
+    });
+    if !state.experiment.last_export_path.is_empty() {
+        ui.label(
+            RichText::new(format!(
+                "Último archivo: {}",
+                state.experiment.last_export_path
+            ))
+            .small()
+            .color(palette.muted),
+        );
+    }
 }
 
 fn draw_fit_plot(
@@ -1865,130 +1912,115 @@ fn draw_fit_plot(
     fit: Option<&fotoelectrico_physics::LinearFitResult>,
     palette: Palette,
 ) {
-    egui::Frame::new()
-        .fill(palette.panel)
-        .stroke(Stroke::new(1.0_f32, palette.border))
-        .corner_radius(egui::CornerRadius::same(12))
-        .inner_margin(egui::Margin::symmetric(14, 12))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new("GRÁFICA V0 CONTRA f")
-                    .size(10.0)
-                    .strong()
-                    .color(palette.cyan),
-            );
-            ui.add_space(4.0);
-            if points.len() < 2 {
-                ui.label(
-                    RichText::new("Necesitas 2 puntos para ver la recta de ajuste.")
-                        .small()
-                        .color(palette.muted),
-                );
-                return;
-            }
-            let desired = Vec2::new(ui.available_width().max(260.0), 240.0);
-            let (response, painter) = ui.allocate_painter(desired, Sense::hover());
-            let rect = response.rect;
-            painter.rect_filled(rect, egui::CornerRadius::same(10), palette.background);
-            let plot = Rect::from_min_max(
-                Pos2::new(rect.left() + 56.0, rect.top() + 12.0),
-                Pos2::new(rect.right() - 14.0, rect.bottom() - 28.0),
-            );
-            let mut xmin = f64::INFINITY;
-            let mut xmax = f64::NEG_INFINITY;
-            let mut ymin = f64::INFINITY;
-            let mut ymax = f64::NEG_INFINITY;
-            for p in points {
-                xmin = xmin.min(p.frequency_hz);
-                xmax = xmax.max(p.frequency_hz);
-                ymin = ymin.min(p.stopping_measured_v);
-                ymax = ymax.max(p.stopping_measured_v);
-            }
-            if let Some(result) = fit {
-                ymin = ymin.min(result.slope_m * xmin + result.intercept_b);
-                ymax = ymax.max(result.slope_m * xmax + result.intercept_b);
-            }
-            let pad_x = ((xmax - xmin) * 0.06).max(1.0e12);
-            let pad_y = ((ymax - ymin) * 0.12).max(0.05);
-            xmin -= pad_x;
-            xmax += pad_x;
-            ymin = (ymin - pad_y).max(0.0);
-            ymax += pad_y;
-            let to_screen = |x: f64, y: f64| {
-                Pos2::new(
-                    plot.left() + ((x - xmin) / (xmax - xmin)) as f32 * plot.width(),
-                    plot.bottom() - ((y - ymin) / (ymax - ymin)) as f32 * plot.height(),
-                )
-            };
-            for frac in [0.0, 0.5, 1.0] {
-                let y = ymin + frac * (ymax - ymin);
-                let pos = to_screen(xmin, y);
+    section_rule(ui, "Gráfica V0 contra f", palette);
+    if points.len() < 2 {
+        ui.label(
+            RichText::new("Necesitas 2 puntos para ver la recta de ajuste.")
+                .small()
+                .color(palette.muted),
+        );
+        return;
+    }
+    let desired = Vec2::new(ui.available_width().max(260.0), 240.0);
+    let (response, painter) = ui.allocate_painter(desired, Sense::hover());
+    let rect = response.rect;
+    painter.rect_filled(rect, egui::CornerRadius::same(10), palette.background);
+    let plot = Rect::from_min_max(
+        Pos2::new(rect.left() + 56.0, rect.top() + 12.0),
+        Pos2::new(rect.right() - 14.0, rect.bottom() - 28.0),
+    );
+    let mut xmin = f64::INFINITY;
+    let mut xmax = f64::NEG_INFINITY;
+    let mut ymin = f64::INFINITY;
+    let mut ymax = f64::NEG_INFINITY;
+    for p in points {
+        xmin = xmin.min(p.frequency_hz);
+        xmax = xmax.max(p.frequency_hz);
+        ymin = ymin.min(p.stopping_measured_v);
+        ymax = ymax.max(p.stopping_measured_v);
+    }
+    if let Some(result) = fit {
+        ymin = ymin.min(result.slope_m * xmin + result.intercept_b);
+        ymax = ymax.max(result.slope_m * xmax + result.intercept_b);
+    }
+    let pad_x = ((xmax - xmin) * 0.06).max(1.0e12);
+    let pad_y = ((ymax - ymin) * 0.12).max(0.05);
+    xmin -= pad_x;
+    xmax += pad_x;
+    ymin = (ymin - pad_y).max(0.0);
+    ymax += pad_y;
+    let to_screen = |x: f64, y: f64| {
+        Pos2::new(
+            plot.left() + ((x - xmin) / (xmax - xmin)) as f32 * plot.width(),
+            plot.bottom() - ((y - ymin) / (ymax - ymin)) as f32 * plot.height(),
+        )
+    };
+    for frac in [0.0, 0.5, 1.0] {
+        let y = ymin + frac * (ymax - ymin);
+        let pos = to_screen(xmin, y);
+        painter.line_segment(
+            [
+                Pos2::new(plot.left(), pos.y),
+                Pos2::new(plot.right(), pos.y),
+            ],
+            Stroke::new(0.7_f32, palette.border),
+        );
+        painter.text(
+            Pos2::new(plot.left() - 5.0, pos.y),
+            Align2::RIGHT_CENTER,
+            format!("{y:.2}"),
+            FontId::proportional(9.0),
+            palette.muted,
+        );
+    }
+    for (label, xv) in [("min", xmin + pad_x), ("max", xmax - pad_x)] {
+        let _ = label;
+        let pos = to_screen(xv, ymin);
+        painter.text(
+            Pos2::new(pos.x, plot.bottom() + 14.0),
+            Align2::CENTER_CENTER,
+            format::scientific(xv, 1),
+            FontId::proportional(9.0),
+            palette.muted,
+        );
+    }
+    painter.text(
+        Pos2::new(plot.center().x, rect.bottom() - 4.0),
+        Align2::CENTER_CENTER,
+        "f (Hz)",
+        FontId::proportional(10.0),
+        palette.muted,
+    );
+    if let Some(result) = fit {
+        let a = to_screen(xmin, result.slope_m * xmin + result.intercept_b);
+        let b = to_screen(xmax, result.slope_m * xmax + result.intercept_b);
+        painter.line_segment([a, b], Stroke::new(2.0_f32, palette.green));
+        painter.text(
+            Pos2::new(plot.right() - 4.0, plot.top() + 12.0),
+            Align2::RIGHT_CENTER,
+            format!("R² = {:.4}", result.r_squared),
+            FontId::proportional(10.0),
+            palette.green,
+        );
+    }
+    for p in points {
+        let center = to_screen(p.frequency_hz, p.stopping_measured_v);
+        // Barra de error ±ruido: conecta la tabla con la recta.
+        let half = p.stopping_measured_v * p.noise_percent as f64 / 100.0;
+        if half > 0.0 {
+            let top = to_screen(p.frequency_hz, p.stopping_measured_v + half);
+            let bottom = to_screen(p.frequency_hz, p.stopping_measured_v - half);
+            painter.line_segment([top, bottom], Stroke::new(1.2_f32, palette.amber));
+            for cap in [top, bottom] {
                 painter.line_segment(
-                    [
-                        Pos2::new(plot.left(), pos.y),
-                        Pos2::new(plot.right(), pos.y),
-                    ],
-                    Stroke::new(0.7_f32, palette.border),
-                );
-                painter.text(
-                    Pos2::new(plot.left() - 5.0, pos.y),
-                    Align2::RIGHT_CENTER,
-                    format!("{y:.2}"),
-                    FontId::proportional(9.0),
-                    palette.muted,
+                    [Pos2::new(cap.x - 4.0, cap.y), Pos2::new(cap.x + 4.0, cap.y)],
+                    Stroke::new(1.2_f32, palette.amber),
                 );
             }
-            for (label, xv) in [("min", xmin + pad_x), ("max", xmax - pad_x)] {
-                let _ = label;
-                let pos = to_screen(xv, ymin);
-                painter.text(
-                    Pos2::new(pos.x, plot.bottom() + 14.0),
-                    Align2::CENTER_CENTER,
-                    format::scientific(xv, 1),
-                    FontId::proportional(9.0),
-                    palette.muted,
-                );
-            }
-            painter.text(
-                Pos2::new(plot.center().x, rect.bottom() - 4.0),
-                Align2::CENTER_CENTER,
-                "f (Hz)",
-                FontId::proportional(10.0),
-                palette.muted,
-            );
-            if let Some(result) = fit {
-                let a = to_screen(xmin, result.slope_m * xmin + result.intercept_b);
-                let b = to_screen(xmax, result.slope_m * xmax + result.intercept_b);
-                painter.line_segment([a, b], Stroke::new(2.0_f32, palette.green));
-                painter.text(
-                    Pos2::new(plot.right() - 4.0, plot.top() + 12.0),
-                    Align2::RIGHT_CENTER,
-                    format!("R² = {:.4}", result.r_squared),
-                    FontId::proportional(10.0),
-                    palette.green,
-                );
-            }
-            for p in points {
-                let center = to_screen(p.frequency_hz, p.stopping_measured_v);
-                // Barra de error ±ruido: conecta la tabla con la recta.
-                let half = p.stopping_measured_v * p.noise_percent as f64 / 100.0;
-                if half > 0.0 {
-                    let top = to_screen(p.frequency_hz, p.stopping_measured_v + half);
-                    let bottom = to_screen(p.frequency_hz, p.stopping_measured_v - half);
-                    painter.line_segment([top, bottom], Stroke::new(1.2_f32, palette.amber));
-                    for cap in [top, bottom] {
-                        painter.line_segment(
-                            [Pos2::new(cap.x - 4.0, cap.y), Pos2::new(cap.x + 4.0, cap.y)],
-                            Stroke::new(1.2_f32, palette.amber),
-                        );
-                    }
-                }
-                painter.circle_filled(center, 4.5, palette.amber);
-            }
-            response.on_hover_text(
-                "Puntos medidos (ámbar) con barra ±ruido y recta V0 = m·f + b (verde).",
-            );
-        });
+        }
+        painter.circle_filled(center, 4.5, palette.amber);
+    }
+    response.on_hover_text("Puntos medidos (ámbar) con barra ±ruido y recta V0 = m·f + b (verde).");
 }
 
 fn draw_iv_plot(ui: &mut egui::Ui, state: &AppState, palette: Palette) {
