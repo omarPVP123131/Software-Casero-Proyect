@@ -1,0 +1,61 @@
+name: Windows
+
+# Compila el instalador de Windows (MSI + NSIS) y lo deja como artefacto
+# descargable. Tauri en Windows usa WebView2, que ya viene en Windows 10/11
+# actualizados; en equipos antiguos el instalador NSIS lo descarga solo.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      # El frontend compila el módulo WASM de física antes de Vite.
+      - name: Instalar wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Toolchain WASM
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Dependencias del frontend
+        working-directory: frontend
+        run: npm ci
+
+      # vite build no compila el WASM por sí solo: el paquete de física se
+      # genera antes y se importa desde src/lib/wasm.
+      - name: Compilar la física a WASM
+        run: node scripts/build-wasm.mjs
+
+      # Se ejecuta desde la raíz (frontend/ y src-tauri/ son hermanos).
+      - name: Compilar y empaquetar
+        run: ./frontend/node_modules/.bin/tauri build
+        shell: bash
+        env:
+          # Firma opcional: sin estas variables el instalador sale sin firmar.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Subir instaladores
+        uses: actions/upload-artifact@v4
+        with:
+          name: photolab-windows
+          path: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
