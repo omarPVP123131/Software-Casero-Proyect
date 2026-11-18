@@ -1,0 +1,18 @@
+[package]
+name = "photolab-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Contrato compartido (tipos + adaptador) entre el motor físico, Tauri y WASM"
+
+[dependencies]
+fotoelectrico-physics.workspace = true
+serde.workspace = true
+ts-rs.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[features]
+default = []
+# ts-rs export needs the derive; keeping it always-on is simplest and tiny.

@@ -1,0 +1,34 @@
+[package]
+name = "photolab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PhotoLab — laboratorio optico del efecto fotoelectrico (Tauri 2)"
+default-run = "photolab"
+
+[lib]
+name = "photolab_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Producción: incrusta el frontend compilado (frontendDist) en el binario.
+# Sin esta feature `cargo build --release` deja la app apuntando a devUrl
+# (http://localhost:1420) y la ventana sale en blanco con "Could not connect
+# to localhost". `npx tauri build` la activa sola; no la quites.
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+photolab-model.workspace = true
+photolab-tauri-commands = { path = "../crates/tauri_commands" }
+serde.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"

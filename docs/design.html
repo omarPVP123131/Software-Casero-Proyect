@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PhotoLab · sistema de diseño</title>
+<style>
+  :root{
+    --bg:#07090f; --bg2:#0d1220; --panel:#0f1526; --panel2:#141c30;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.16);
+    --text:#e8edf7; --text2:#aab6cd; --muted:#7c8aa5;
+    --wl:#7dd3fc; --uv:#8B5CF6; --ir:#7F1D1D; --ok:#60A5FA; --warn:#F59E0B; --cyan:#67E8F9;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:
+    radial-gradient(60% 40% at 50% 0%,rgba(56,189,248,.07),transparent 70%),
+    radial-gradient(40% 50% at 90% 90%,rgba(168,85,247,.06),transparent 70%),
+    linear-gradient(180deg,var(--bg),var(--bg2));
+    color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:44px 24px 72px}
+  .brand{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  h1{font-size:28px;margin:0;letter-spacing:-.02em}
+  .tag{color:var(--muted);margin:0 0 26px}
+  h2{font-size:18px;margin:38px 0 12px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;border-radius:8px;
+    background:rgba(125,211,252,.12);border:1px solid rgba(125,211,252,.35);color:var(--wl);
+    font:600 12px/1 var(--mono)}
+  h3{font-size:14.5px;margin:0 0 8px}
+  p{color:var(--text2);margin:8px 0}
+  code,.mono{font-family:var(--mono);font-size:.92em;font-variant-numeric:tabular-nums}
+  code{background:var(--panel2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;color:var(--text)}
+  .panel{background:rgba(15,21,38,.62);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 1px 2px rgba(2,6,23,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+  .grid{display:grid;gap:12px}
+  .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  @media(max-width:860px){.g2,.g3{grid-template-columns:1fr}}
+  .card{padding:16px}
+  .pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
+    padding:3px 10px;font-size:12px;color:var(--text2);background:var(--panel2)}
+  .pill i{width:9px;height:9px;border-radius:50%;flex:none}
+  .swatch{height:30px;border-radius:10px;border:1px solid var(--line2)}
+  .spacing{display:flex;align-items:flex-end;gap:9px;margin-top:12px}
+  .spacing .bar{background:rgba(125,211,252,.35);border:1px solid rgba(125,211,252,.6);border-radius:3px}
+  .spacing span{font:11px var(--mono);color:var(--muted)}
+  .radii{display:flex;gap:16px;margin-top:12px;align-items:flex-end}
+  .radii div{width:54px;height:54px;border:1.5px solid var(--wl);background:rgba(125,211,252,.08)}
+  .radii figcaption{font:10px var(--mono);color:var(--muted);text-align:center;margin-top:4px}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  td{color:var(--text2)}
+  td.mono{color:var(--text)}
+  .kbd{font:11px var(--mono);border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:1px 6px;color:var(--text2);background:var(--panel2)}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}
+  .node{border:1px solid rgba(125,211,252,.4);background:rgba(125,211,252,.08);border-radius:10px;padding:7px 11px;color:var(--text)}
+  .arrow{color:var(--muted)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .cyan{color:var(--cyan)}
+  .state{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--line)}
+  .state.ok{background:linear-gradient(135deg,rgba(96,165,250,.16),transparent 60%);border-color:rgba(96,165,250,.5)}
+  .state.warn{background:linear-gradient(135deg,rgba(245,158,11,.14),transparent 60%);border-color:rgba(245,158,11,.5)}
+  .state.off{background:rgba(148,163,184,.08);border-color:var(--line2)}
+  .icon{font-size:18px}
+  .note{border-left:3px solid var(--wl);padding:8px 14px;background:rgba(125,211,252,.06);border-radius:0 10px 10px 0;margin:14px 0}
+  .eq{font-family:var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+     padding:10px 14px;color:var(--cyan);overflow-x:auto;font-size:13px}
+  .frame{border:1px solid var(--line2);border-radius:14px;padding:12px;background:rgba(5,7,13,.65)}
+  .frame .canvas{height:200px;border-radius:10px;background:
+    radial-gradient(45% 60% at 22% 48%,rgba(139,92,246,.28),transparent 70%),
+    linear-gradient(180deg,#05070d,#0a1020);position:relative;overflow:hidden;border:1px solid var(--line)}
+  .frame .grid-lines{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(148,163,184,.07) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(148,163,184,.07) 1px,transparent 1px);
+    background-size:34px 34px}
+  .frame .plate{position:absolute;top:26px;bottom:26px;width:11px;border-radius:4px;
+    background:linear-gradient(90deg,rgba(255,255,255,.35),#8a94a8 45%,rgba(0,0,0,.45))}
+  .frame .energy{position:absolute;left:12px;top:12px;width:188px;padding:9px;border-radius:10px;
+    background:rgba(9,13,24,.78);border:1px solid var(--line);font:10px var(--mono);color:var(--muted)}
+  .frame .ebar{height:9px;border-radius:4px;margin-top:7px;background:rgba(245,158,11,.55);position:relative}
+  .frame .ebar i{position:absolute;left:60%;right:36%;top:0;bottom:0;background:rgba(103,232,249,.9);border-radius:0 4px 4px 0}
+  .frame .badge{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(9,13,24,.78);
+    border:1px solid var(--line);border-radius:10px;padding:5px 12px;font:600 11px Inter;color:var(--text);white-space:nowrap}
+  .frame .legend{position:absolute;left:11px;bottom:7px;font:9.5px var(--mono);color:var(--muted)}
+  .state-legend{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .foot{margin-top:48px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <svg width="42" height="42" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="8" fill="#141c30" stroke="rgba(255,255,255,.16)"/>
+      <path d="M5 21 L27 11" stroke="#7dd3fc" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="15" cy="18" r="1.5" fill="#67E8F9"/>
+      <circle cx="20" cy="15.5" r="1.5" fill="#67E8F9"/>
+      <circle cx="24" cy="13.5" r="1.5" fill="#67E8F9"/>
+    </svg>
+    <div>
+      <h1>PhotoLab · sistema de diseño</h1>
+      <p class="tag">«Laboratorio óptico moderno»: oscuro, glass y preciso. Implementado 1:1 en <code>frontend/src/app.css</code>. Los tokens de abajo son los que usa la app.</p>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <section class="panel card">
+      <h3>Principios</h3>
+      <p><b>1 · Instrumento.</b> Cifras tabulares, unidades siempre visibles, un único motor de física detrás de cada número.</p>
+      <p><b>2 · La luz manda.</b> El acento de la UI es el color real de λ (conversión λ→RGB).</p>
+      <p><b>3 · Calma.</b> Nada compite con la escena: una sola zona de color fuerte.</p>
+      <p><b>4 · Accesible.</b> Color + icono + forma + texto; nunca solo color.</p>
+      <div class="pills">
+        <span class="pill"><i style="background:#07090f;border:1px solid var(--line2)"></i>#07090F</span>
+        <span class="pill"><i style="background:#0d1220"></i>#0D1220</span>
+        <span class="pill"><i style="background:#141c30"></i>#141C30</span>
+        <span class="pill"><i style="background:#7dd3fc"></i>acento λ</span>
+        <span class="pill"><i style="background:#67E8F9"></i>electrón</span>
+        <span class="pill"><i style="background:#f59e0b"></i>Φ / frenado</span>
+      </div>
+      <div class="spacing">
+        <div class="bar" style="width:4px;height:4px"></div><span>4</span>
+        <div class="bar" style="width:8px;height:8px"></div><span>8</span>
+        <div class="bar" style="width:12px;height:12px"></div><span>12</span>
+        <div class="bar" style="width:16px;height:16px"></div><span>16</span>
+        <div class="bar" style="width:24px;height:24px"></div><span>24</span>
+        <div class="bar" style="width:32px;height:32px"></div><span>32</span>
+      </div>
+    </section>
+
+    <section class="panel card">
+      <h3>Color de la luz = acento</h3>
+      <p>El haz, el slider, el borde activo y el foco toman el color del espectro. Fuera de 380–780 nm la interfaz pasa a violeta (UV) o rojo profundo (IR) <b>con rayado</b> y la etiqueta «no visible».</p>
+      <div class="swatch" style="background:linear-gradient(90deg,#4C1D95,#6D28D9 12%,#3B82F6 30%,#22C55E 48%,#EAB308 64%,#EF4444 80%,#7F1D1D)"></div>
+      <div class="pills" style="margin-top:8px">
+        <span class="pill"><i style="background:var(--uv)"></i>UV 180–379 · rayado</span>
+        <span class="pill"><i style="background:#22C55E"></i>visible 380–780</span>
+        <span class="pill"><i style="background:var(--ir)"></i>IR 781–900 · rayado</span>
+      </div>
+      <div class="radii">
+        <figure style="margin:0"><div style="border-radius:8px"></div><figcaption>8 · control</figcaption></figure>
+        <figure style="margin:0"><div style="border-radius:12px"></div><figcaption>12 · tarjeta</figcaption></figure>
+        <figure style="margin:0"><div style="border-radius:16px"></div><figcaption>16 · panel</figcaption></figure>
+      </div>
+    </section>
+  </div>
+
+  <h2><span class="n">2</span>Tipografía</h2>
+  <div class="grid g3">
+    <div class="panel card">
+      <h3>Inter · UI</h3>
+      <p style="font-size:13px">400/500/600/700. Escala global <code>--font-scale</code> (A−/A+, persistida por sesión).</p>
+    </div>
+    <div class="panel card">
+      <h3>JetBrains Mono · cifras</h3>
+      <p class="mono" style="font-size:13px">Kmax 0.74 eV<br/>f 7.49×10¹⁴ Hz<br/>I 17.74 µA</p>
+      <p style="font-size:12px"><code>tabular-nums</code>: las columnas no bailan al cambiar valores.</p>
+    </div>
+    <div class="panel card">
+      <h3>KaTeX · ecuaciones</h3>
+      <div class="eq">K<sub>max</sub> = h·f − Φ&nbsp; · &nbsp;V₀ = K<sub>max</sub>/e</div>
+      <p style="font-size:12px">Renderizadas, nunca imágenes (<code>Eq.svelte</code>).</p>
+    </div>
+  </div>
+
+  <h2><span class="n">3</span>Movimiento</h2>
+  <div class="panel card">
+    <p><b>120 ms</b> hover/press · <b>200 ms</b> entrada de tarjetas · <b>320 ms</b> colapso de paneles, con una sola curva <code>cubic-bezier(.2,.8,.2,1)</code>. Con <code>prefers-reduced-motion</code> o alto contraste: sin bloom, sin estelas, sin <code>backdrop-filter</code> y animación <b>pausada</b> al arrancar.</p>
+  </div>
+
+  <h2><span class="n">4</span>Estado de emisión: nunca solo color</h2>
+  <div class="state-legend">
+    <div class="state ok"><span class="icon">⬤</span><div><b class="ok">EMITE</b><div class="mono" style="font-size:11px;color:var(--muted)">círculo lleno</div></div></div>
+    <div class="state warn"><span class="icon">⊘</span><div><b class="warn">BLOQUEADO</b><div class="mono" style="font-size:11px;color:var(--muted)">barra de frenado</div></div></div>
+    <div class="state off"><span class="icon" style="color:var(--muted)">○</span><div><b style="color:var(--muted)">NO EMITE</b><div class="mono" style="font-size:11px;color:var(--muted)">círculo vacío</div></div></div>
+  </div>
+
+  <h2><span class="n">5</span>Canvas principal</h2>
+  <div class="frame">
+    <div class="canvas">
+      <div class="grid-lines"></div>
+      <div class="energy">energías (eV)<div class="ebar"><i></i></div><div style="margin-top:6px">Kmax = E − Φ = 0.74 eV</div></div>
+      <div class="badge">Kmax = 0.74 eV · V₀ = 0.74 V</div>
+      <div class="plate" style="left:36%"></div>
+      <div class="plate" style="left:76%"></div>
+      <svg viewBox="0 0 640 200" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">
+        <defs><linearGradient id="beam" x1="0" x2="1"><stop offset="0" stop-color="#8B5CF6" stop-opacity=".9"/><stop offset="1" stop-color="#C084FC" stop-opacity=".5"/></linearGradient></defs>
+        <path d="M80 98 Q140 86 210 98 T330 98" stroke="url(#beam)" stroke-width="1.6" fill="none"/>
+        <path d="M80 110 Q140 98 210 110 T330 110" stroke="url(#beam)" stroke-width="1.2" fill="none" opacity=".6"/>
+        <circle cx="310" cy="76" r="2.6" fill="#67E8F9"/><circle cx="370" cy="124" r="2.6" fill="#67E8F9"/>
+        <circle cx="430" cy="90" r="2.6" fill="#67E8F9"/><circle cx="480" cy="116" r="2.6" fill="#67E8F9"/>
+      </svg>
+      <div class="legend">escala de velocidad comprimida √(K/1 eV) acotada 0.5–2.2 · leyenda</div>
+    </div>
+  </div>
+  <p style="font-size:12.5px">Fotones con λ dibujada como longitud de onda y densidad ∝ intensidad; electrones con estela y rapidez ∝ escala; con frenado se desaceleran y <b>regresan</b>. Capas conmutables: campo, etiquetas, trayectorias, rejilla, medidor de corriente y diagrama de energías. Animación con <code>dt</code> real acotado a 50 ms, pausa y 0.25×.</p>
+
+  <h2><span class="n">6</span>Distribución</h2>
+  <div class="panel" style="overflow:hidden">
+    <div style="display:grid;grid-template-rows:34px 1fr 26px;height:280px">
+      <div style="display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--line);background:rgba(15,21,38,.7);font-size:11.5px;color:var(--text2)">
+        <b style="color:var(--text)">PhotoLab</b><span style="color:var(--muted)">logo · escenario · ⌘K · sesión · tema</span>
+        <span style="margin-left:auto" class="mono" style="font-size:10px">Ctrl K · F11</span>
+      </div>
+      <div style="display:grid;grid-template-columns:140px 1fr 150px;min-height:0">
+        <div style="border-right:1px solid var(--line);padding:8px;font-size:10.5px;color:var(--muted)">
+          <b style="color:var(--text2)">Controles</b><br/>Material · Luz<br/>Voltaje · Modelo · Realismo
+          <div style="margin-top:8px;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)"></div>
+          <div style="margin-top:6px;height:28px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;min-width:0">
+          <div style="display:flex;gap:5px;padding:5px 8px;border-bottom:1px solid var(--line);font-size:10.5px">
+            <span class="pill" style="border-color:rgba(125,211,252,.5);background:rgba(125,211,252,.12);color:var(--text)">Celda</span>
+            <span class="pill">I–V</span><span class="pill">Kmax(λ)</span><span class="pill">Experimento</span>
+          </div>
+          <div style="flex:1;margin:8px;border-radius:12px;border:1px solid var(--line);background:
+            radial-gradient(50% 60% at 50% 45%,rgba(103,232,249,.1),transparent 70%),
+            linear-gradient(180deg,#05070d,#0a1020);position:relative">
+            <div style="position:absolute;left:34%;top:22%;bottom:22%;width:8px;border-radius:3px;background:linear-gradient(90deg,rgba(255,255,255,.3),#8a94a8,rgba(0,0,0,.4))"></div>
+            <div style="position:absolute;left:74%;top:22%;bottom:22%;width:8px;border-radius:3px;background:linear-gradient(90deg,rgba(255,255,255,.3),#8a94a8,rgba(0,0,0,.4))"></div>
+          </div>
+        </div>
+        <div style="border-left:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:6px">
+          <div class="state ok" style="padding:7px"><span class="icon" style="font-size:14px">⬤</span><div><b class="ok" style="font-size:12px">EMITE</b></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+            <div style="height:28px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)"></div>
+            <div style="height:28px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)"></div>
+            <div style="height:28px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)"></div>
+            <div style="height:28px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:0 12px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted)">
+        <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#34d399"></span>motor OK · WASM</span>
+        <span>ideal</span><span class="mono">60 fps</span><span style="margin-left:auto">SI · eV · nm</span>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:12.5px">Ventana mínima 1280×800 (absoluta 1024×680). Paneles redimensionables y colapsables; por debajo de 1100 px se pliegan. Modo presentación oculta laterales.</p>
+
+  <h2><span class="n">7</span>Atajos</h2>
+  <div class="panel card">
+    <table>
+      <tr><th>Acción</th><th>Atajo</th></tr>
+      <tr><td>Paleta de comandos</td><td class="mono"><span class="kbd">Ctrl</span>/<span class="kbd">⌘</span> + <span class="kbd">K</span></td></tr>
+      <tr><td>Deshacer / rehacer</td><td class="mono"><span class="kbd">Ctrl</span>+<span class="kbd">Z</span> · <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">Z</span></td></tr>
+      <tr><td>Pausa / reanudar</td><td class="mono"><span class="kbd">Espacio</span></td></tr>
+      <tr><td>Reiniciar tiempo</td><td class="mono"><span class="kbd">R</span></td></tr>
+      <tr><td>Paso 1/30 s</td><td class="mono"><span class="kbd">Shift</span>+<span class="kbd">→</span></td></tr>
+      <tr><td>Pestañas</td><td class="mono"><span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span> <span class="kbd">4</span></td></tr>
+      <tr><td>Modo presentación</td><td class="mono"><span class="kbd">F11</span></td></tr>
+      <tr><td>Ajuste fino</td><td class="mono"><span class="kbd">Shift</span> + flechas</td></tr>
+    </table>
+  </div>
+
+  <h2><span class="n">8</span>De egui + Macroquad a Tauri 2</h2>
+  <div class="panel card">
+    <div class="flow">
+      <span class="node">Controles Svelte</span><span class="arrow">→</span>
+      <span class="node">store session (tipos ts-rs)</span><span class="arrow">→</span>
+      <span class="node">photolab-wasm</span><span class="arrow">→</span>
+      <span class="node">photolab-model</span><span class="arrow">→</span>
+      <span class="node">fotoelectrico-physics</span>
+    </div>
+    <p style="margin-top:12px">Un solo toolkit de UI: desaparece el doble bucle de eventos y el desfase DPI egui↔Macroquad. Sin IPC por frame (WASM en el mismo hilo del canvas); <code>invoke</code> queda para disco y como respaldo.</p>
+    <div class="note"><b>Contrato único:</b> si un struct de Rust cambia, los tipos TS regenerados hacen fallar <code>svelte-check</code>. Nada de números mágicos duplicados.</div>
+  </div>
+
+  <div class="foot">
+    PhotoLab 2.0 · MIT · física: <code>fotoelectrico-physics</code> · capturas reales en <code>assets/</code> ·
+    detalle en <code>docs/design-spec.md</code>.
+  </div>
+</div>
+</body>
+</html>
