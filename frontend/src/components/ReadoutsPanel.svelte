@@ -101,12 +101,12 @@
   const metrics = $derived.by(() => {
     if (!r) return [];
     return [
+      { key: "k", label: s.kmax, value: ev(r.kMaxEv), full: `${ev(r.kMaxEv)} · ${scientific(r.kMaxJ, 2)} J`, latex: "K_{\\max} = hf-\\Phi", spark: spark.kmax, color: "#67E8F9" },
+      { key: "v0", label: s.stoppingV, long: s.stoppingVLong, value: volts(r.stoppingPotentialV), latex: "V_0 = K_{\\max}/e", spark: spark.collection, color: "#F59E0B" },
       { key: "E", label: s.photonEnergy, long: s.photonEnergyLong, value: ev(r.photonEnergyEv), latex: "E = hf", spark: null, color: "var(--wl)" },
       { key: "f", label: s.frequency, value: hz(r.frequencyHz), latex: "f = c/λ", spark: null, color: "var(--wl)" },
       { key: "phi", label: s.workFunction, long: s.workFunctionLong, value: ev(r.workFunctionEv), latex: "\\Phi", spark: null, color: "var(--warn)" },
       { key: "l0", label: s.thresholdWl, value: nm(r.thresholdWavelengthNm), latex: "\\lambda_0 = c/f_0", spark: null, color: "var(--muted)" },
-      { key: "k", label: s.kmax, value: ev(r.kMaxEv), full: `${ev(r.kMaxEv)} · ${scientific(r.kMaxJ, 2)} J`, latex: "K_{\\max} = hf-\\Phi", spark: spark.kmax, color: "#67E8F9" },
-      { key: "v0", label: s.stoppingV, long: s.stoppingVLong, value: volts(r.stoppingPotentialV), latex: "V_0 = K_{\\max}/e", spark: spark.collection, color: "#F59E0B" },
       { key: "v", label: s.speed, long: s.speedLong, value: speed(r.electronMaxSpeedMS), latex: "v = \\sqrt{2K_{\\max}/m_e}", spark: null, color: "#67E8F9" },
       { key: "flux", label: s.photonFlux, long: s.photonFluxLong, value: fluxParts(r.photonFluxPerM2S)[0], unit: fluxParts(r.photonFluxPerM2S)[1], full: flux(r.photonFluxPerM2S), latex: "\\Phi_{fot} = P/E", spark: null, color: "var(--wl)" },
       { key: "i", label: s.photocurrent, long: s.photocurrentLong, value: current(r.photocurrentA), latex: "I = e\\Phi A\\,\\mathrm{QE}\\,g(V)", spark: spark.current, color: "#A78BFA" },
@@ -143,7 +143,7 @@
 
   <div class="metrics">
     {#each metrics as metric (metric.key)}
-      <div class="metric card">
+      <div class="metric card" class:primary={metric.key === "k" || metric.key === "v0"}>
         <div class="metric-head">
           <span class="metric-label small muted" title={(metric as { long?: string }).long ?? metric.label}>{metric.label}</span>
           <div class="metric-buttons">
@@ -377,10 +377,22 @@
   }
   .metric-unit {
     display: block;
-    font-size: 0.78em;
+    font-size: 0.86em;
     font-weight: 500;
-    opacity: 0.75;
+    opacity: 0.78;
     line-height: 1.15;
+  }
+  .metric.primary {
+    background: color-mix(in srgb, var(--wl-soft) 60%, var(--panel-2));
+    border-color: color-mix(in srgb, var(--wl) 34%, var(--line));
+  }
+  .metric.primary .metric-value {
+    font-size: 1.24em;
+    font-weight: 700;
+  }
+  .metric.primary .metric-label {
+    font-size: 0.8em;
+    color: var(--text-2);
   }
   .metric-value {
     font-size: 0.82em;

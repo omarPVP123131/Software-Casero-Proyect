@@ -38,6 +38,13 @@
     voltage < 0 && v0 > 0 ? Math.min(1, -voltage / Math.max(v0, 1e-6)) : 0,
   );
 
+  // El texto del canvas no hereda el tamaño de fuente del DOM: aplicamos la
+  // preferencia de accesibilidad con un tope para no desbordar la escalera.
+  const fscale = $derived(Math.min(1.2, Math.max(0.85, lab.preferences.fontScale)));
+  function f(px: number): number {
+    return Math.round(px * fscale * 10) / 10;
+  }
+
   function setup(): void {
     if (!canvas || !wrap) return;
     const rect = wrap.getBoundingClientRect();
@@ -167,7 +174,7 @@
     ctx.arc(x, y, 5.5, 0, Math.PI * 2);
     ctx.fill();
     // etiqueta λ
-    ctx.font = `500 11px JetBrains Mono, monospace`;
+    ctx.font = `500 ${f(11)}px JetBrains Mono, monospace`;
     ctx.fillStyle = css("--muted") || "#7c8aa5";
     ctx.textAlign = "center";
     ctx.fillText(`${wl.toFixed(0)} nm`, x, y + 60);
@@ -206,7 +213,7 @@
         ctx.stroke();
       }
       ctx.restore();
-      ctx.font = "600 10px Inter, sans-serif";
+      ctx.font = `600 ${f(10)}px Inter, sans-serif`;
       ctx.fillStyle = css("--muted") || "#7c8aa5";
       ctx.textAlign = "center";
       ctx.fillText(label, x, g.plateTop - 10);
@@ -350,7 +357,7 @@
         ctx.fill();
       }
     }
-    ctx.font = "500 10px Inter, sans-serif";
+    ctx.font = `500 ${f(10)}px Inter, sans-serif`;
     ctx.fillStyle = dir > 0 ? "rgba(96,165,250,0.8)" : "rgba(245,158,11,0.9)";
     ctx.textAlign = "left";
     ctx.fillText(
@@ -382,7 +389,7 @@
     roundRect(ctx, midX - 34, y - 14, 68, 28, 8);
     ctx.fill();
     ctx.stroke();
-    ctx.font = "600 12px JetBrains Mono, monospace";
+    ctx.font = `600 ${f(12)}px JetBrains Mono, monospace`;
     ctx.fillStyle = v === 0 ? css("--muted") : v > 0 ? "#60a5fa" : "#f59e0b";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -427,7 +434,7 @@
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = "500 9.5px JetBrains Mono, monospace";
+    ctx.font = `500 ${f(9.5)}px JetBrains Mono, monospace`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
     ctx.fillStyle = css("--muted") || "#7c8aa5";
@@ -493,7 +500,7 @@
     ctx.fillText(`E ${r0.photonEnergyEv.toFixed(2)}`, axisX + axisW, barY - 14);
 
     // resultado
-    ctx.font = "600 10px Inter, sans-serif";
+    ctx.font = `600 ${f(10)}px Inter, sans-serif`;
     ctx.textAlign = "left";
     ctx.fillStyle = r0.emits ? "#67E8F9" : css("--warn") || "#f59e0b";
     ctx.fillText(
@@ -519,7 +526,7 @@
     ctx.fillStyle = "rgba(103,232,249,0.75)";
     const fillH = h * frac;
     ctx.fillRect(x + 1, top + h - fillH, 6, fillH);
-    ctx.font = "500 9.5px Inter, sans-serif";
+    ctx.font = `500 ${f(9.5)}px Inter, sans-serif`;
     ctx.fillStyle = css("--muted") || "#7c8aa5";
     ctx.textAlign = "center";
     ctx.fillText("I", x + 4, top - 8);
@@ -544,14 +551,14 @@
     ctx.textBaseline = "middle";
     if (!r0.emits) {
       ctx.fillStyle = css("--text") || "#e8edf7";
-      ctx.font = "600 12px Inter, sans-serif";
+      ctx.font = `600 ${f(12)}px Inter, sans-serif`;
       ctx.fillText(
         `E = ${r0.photonEnergyEv.toFixed(2)} eV  <  Φ = ${r0.workFunctionEv.toFixed(2)} eV`,
         g.w / 2,
         boxY + 13,
       );
       ctx.fillStyle = css("--muted") || "#7c8aa5";
-      ctx.font = "500 10.5px Inter, sans-serif";
+      ctx.font = `500 ${f(10.5)}px Inter, sans-serif`;
       ctx.fillText(
         `faltan ${r0.deficitEv.toFixed(2)} eV · λ₀ = ${r0.thresholdWavelengthNm.toFixed(0)} nm`,
         g.w / 2,
@@ -559,17 +566,17 @@
       );
     } else if (r0.blocked) {
       ctx.fillStyle = css("--warn") || "#f59e0b";
-      ctx.font = "600 12px Inter, sans-serif";
+      ctx.font = `600 ${f(12)}px Inter, sans-serif`;
       ctx.fillText(`BLOQUEADO: V = ${voltage.toFixed(2)} V < −V₀ = ${(-v0).toFixed(2)} V`, g.w / 2, boxY + 13);
       ctx.fillStyle = css("--muted") || "#7c8aa5";
-      ctx.font = "500 10.5px Inter, sans-serif";
+      ctx.font = `500 ${f(10.5)}px Inter, sans-serif`;
       ctx.fillText(`Kmax = ${r0.kMaxEv.toFixed(2)} eV no cambia con V`, g.w / 2, boxY + 26);
     } else {
       ctx.fillStyle = css("--text") || "#e8edf7";
-      ctx.font = "600 12px Inter, sans-serif";
+      ctx.font = `600 ${f(12)}px Inter, sans-serif`;
       ctx.fillText(`Kmax = ${r0.kMaxEv.toFixed(2)} eV · V₀ = ${r0.stoppingPotentialV.toFixed(2)} V`, g.w / 2, boxY + 13);
       ctx.fillStyle = css("--muted") || "#7c8aa5";
-      ctx.font = "500 10.5px Inter, sans-serif";
+      ctx.font = `500 ${f(10.5)}px Inter, sans-serif`;
       ctx.fillText(
         lang === "en"
           ? `v = ${(r0.electronMaxSpeedMS / 1e6).toFixed(2)}×10⁶ m/s · scale ${r0.speedScale.toFixed(2)}×`
@@ -580,7 +587,7 @@
     }
     // leyenda de escala de velocidad (siempre visible: requisito didáctico)
     ctx.textAlign = "left";
-    ctx.font = "500 9.5px Inter, sans-serif";
+    ctx.font = `500 ${f(9.5)}px Inter, sans-serif`;
     ctx.fillStyle = css("--muted") || "#7c8aa5";
     ctx.fillText(
       lab.preferences.speedScale === "compressed"
@@ -697,12 +704,55 @@
     return () => cancelAnimationFrame(raf);
   });
 
+  // --- Navegación por teclado de las zonas explicativas -------------------
+  // Las flechas recorren las mismas zonas que el puntero, de modo que la
+  // explicación no depende de poder mover el ratón.
+  let kbdZone = $state<number | null>(null);
+  const zones = $derived.by(() => {
+    const g = sceneGeometry(W, H);
+    const L = ladderBox;
+    return [
+      { x: g.sourceX, y: g.midY },
+      { x: L.x0 + L.w / 2, y: L.y0 + 46 },
+      { x: g.cathodeX, y: g.midY },
+      { x: g.anodeX, y: g.midY },
+      { x: (g.cathodeX + g.anodeX) / 2, y: g.batteryY },
+      { x: (g.cathodeX + g.anodeX) / 2, y: g.midY },
+    ];
+  });
+
+  function onSceneKey(event: KeyboardEvent): void {
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      const dir = event.key === "ArrowRight" ? 1 : -1;
+      const start = kbdZone ?? (dir > 0 ? -1 : 0);
+      kbdZone = (start + dir + zones.length) % zones.length;
+      hover = zones[kbdZone];
+    } else if (event.key === "Escape") {
+      kbdZone = null;
+      hover = null;
+    }
+  }
+
+  const stateWord = $derived(
+    lab.emissionState === "emit" ? s.emits : lab.emissionState === "blocked" ? s.blocked : s.noEmit,
+  );
+  const sceneAria = $derived(
+    lang === "en"
+      ? `Photoelectric tube scene. ${lab.titleFor(lab.controls.material)}, ${wl.toFixed(0)} nm, ${voltage.toFixed(2)} V. ${stateWord}. Use the left and right arrows to explore the regions; Escape closes the explanation.`
+      : `Escena del tubo fotoeléctrico. ${lab.titleFor(lab.controls.material)}, ${wl.toFixed(0)} nm, ${voltage.toFixed(2)} V. ${stateWord}. Usa las flechas izquierda y derecha para recorrer las zonas; Escape cierra la explicación.`,
+  );
+
   // Exponer fps para la barra de estado (vía store ligero).
   $effect(() => {
     (window as unknown as { __photolabFps?: number }).__photolabFps = fps;
   });
 </script>
 
+<!-- La escena es un gráfico interactivo: con tabindex y flechas se puede
+     recorrer con teclado, aunque su rol accesible siga siendo "img". -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="scene-wrap"
   bind:this={wrap}
@@ -711,15 +761,27 @@
     hover = { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }}
   onpointerleave={() => (hover = null)}
+  onkeydown={onSceneKey}
+  onblur={() => {
+    if (kbdZone !== null) {
+      kbdZone = null;
+      hover = null;
+    }
+  }}
+  tabindex="0"
   role="img"
-  aria-label="Escena del tubo fotoeléctrico: fuente de luz, cátodo y ánodo"
+  aria-label={sceneAria}
 >
   <canvas bind:this={canvas}></canvas>
+  <div class="kbd-hint small" aria-hidden="true">
+    <span class="kbd">←</span><span class="kbd">→</span> {lang === "en" ? "explore" : "explorar"}
+  </div>
   {#if hover && tip}
     <div
       class="readout-float tip"
       style:left="{tipPos.left}px"
       style:top="{tipPos.top}px"
+      role="status"
     >
       <span class="tip-title">{tip.title}</span>
       <span class="tip-body">{tip.body}</span>
@@ -743,6 +805,29 @@
     overflow: hidden;
     border: 1px solid var(--line);
     background: var(--canvas-bg-0);
+  }
+  .scene-wrap:focus-visible {
+    outline: 2px solid var(--wl);
+    outline-offset: -2px;
+  }
+  .kbd-hint {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: var(--r-full);
+    background: color-mix(in srgb, var(--panel-solid) 82%, transparent);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity var(--dur-1) var(--ease);
+    pointer-events: none;
+  }
+  .scene-wrap:focus-visible .kbd-hint {
+    opacity: 1;
   }
 
   canvas {

@@ -176,6 +176,14 @@
   {#if tab === "experiment"}
     <ExperimentPanel />
   {/if}
+
+  {#if (tab === "iv" && !ivSpec) || (tab === "kmax" && !kmaxSpec)}
+    <div class="graph-card empty-card rise" role="status">
+      <div class="empty-glyph" aria-hidden="true">⋯</div>
+      <div class="label">{s.noDataTitle}</div>
+      <p class="small muted">{s.noDataBody}</p>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -229,5 +237,23 @@
       rgba(148, 163, 184, 0.85) 0 5px,
       transparent 5px 9px
     );
+  }
+  .empty-card {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: var(--sp-2);
+    padding: 48px var(--sp-4);
+    border-style: dashed;
+    color: var(--muted);
+  }
+  .empty-glyph {
+    font-size: 1.6em;
+    letter-spacing: 0.2em;
+    opacity: 0.6;
+  }
+  .empty-card p {
+    margin: 0;
+    max-width: 42ch;
   }
 </style>
