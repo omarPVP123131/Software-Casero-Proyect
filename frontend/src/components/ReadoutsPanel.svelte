@@ -369,8 +369,7 @@
     justify-content: space-between;
   }
   .metric-label {
-    font-size: 0.68em;
-    text-transform: uppercase;
+    font-size: 0.74em;
     letter-spacing: 0.05em;
     white-space: nowrap;
     overflow: hidden;

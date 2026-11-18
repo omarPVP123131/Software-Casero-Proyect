@@ -3,6 +3,7 @@
   // Está pensado como chuleta: agrupado por tarea, no por tecla.
   import { lab } from "../lib/store.svelte";
   import { t } from "../lib/i18n";
+  import { paletteShortcut, redoShortcut, undoShortcut } from "../lib/platform";
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
   let sheetEl = $state<HTMLDivElement | null>(null);
@@ -34,9 +35,9 @@
     {
       title: es ? "Edición" : "Editing",
       rows: [
-        [es ? "Ctrl/⌘ + Z" : "Ctrl/⌘ + Z", es ? "Deshacer" : "Undo"],
-        [es ? "Ctrl/⌘ + Shift + Z" : "Ctrl/⌘ + Shift + Z", es ? "Rehacer" : "Redo"],
-        ["Ctrl/⌘ + K", es ? "Paleta de comandos" : "Command palette"],
+        [undoShortcut, es ? "Deshacer" : "Undo"],
+        [redoShortcut, es ? "Rehacer" : "Redo"],
+        [paletteShortcut, es ? "Paleta de comandos" : "Command palette"],
       ],
     },
     {

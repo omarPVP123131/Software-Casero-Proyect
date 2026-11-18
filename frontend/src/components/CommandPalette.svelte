@@ -82,6 +82,11 @@
       run(filtered[active]);
     }
   }
+
+  let searchEl = $state<HTMLInputElement | null>(null);
+  $effect(() => {
+    if (open) searchEl?.focus();
+  });
 </script>
 
 {#if open}
@@ -98,6 +103,7 @@
         class="search"
         type="text"
         placeholder="Buscar acción, material o ajuste…"
+        bind:this={searchEl}
         bind:value={query}
         onkeydown={onKey}
         aria-label="Buscar comando"

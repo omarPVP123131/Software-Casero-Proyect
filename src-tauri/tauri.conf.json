@@ -14,13 +14,15 @@
       {
         "label": "main",
         "title": "PhotoLab — Laboratorio del efecto fotoeléctrico",
-        "width": 1280,
-        "height": 800,
+        "width": 1200,
+        "height": 720,
         "minWidth": 1024,
-        "minHeight": 680,
+        "minHeight": 640,
         "center": true,
         "resizable": true,
-        "dragDropEnabled": true
+        "dragDropEnabled": true,
+        "theme": "Dark",
+        "backgroundColor": "#0b1020"
       }
     ],
     "security": {

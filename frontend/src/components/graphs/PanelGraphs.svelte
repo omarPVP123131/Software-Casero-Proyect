@@ -1,11 +1,13 @@
 <script lang="ts">
   // Pestañas de gráficas: I–V · Kmax(λ) · Experimento V₀–f.
-  import { lab } from "../../lib/store.svelte";
+  import { lab, type Tab } from "../../lib/store.svelte";
   import { t } from "../../lib/i18n";
   import { wavelengthToColor } from "../../lib/spectrum";
   import { sScale, type PlotSpec } from "../../lib/plots";
   import Plot from "./Plot.svelte";
   import ExperimentPanel from "./ExperimentPanel.svelte";
+
+  let { tab }: { tab: Tab } = $props();
 
   const s = $derived(t(lab.preferences.lang));
 
@@ -89,6 +91,9 @@
       ? lab.titleFor(lab.controls.comparisonMaterial)
       : "",
   );
+  const comparisonIsCurrent = $derived(
+    lab.controls.comparisonMaterial === lab.controls.material,
+  );
 
   // ---------- Kmax(λ) ----------
   const kmaxSpec = $derived.by(() => {
@@ -105,7 +110,7 @@
     const series: PlotSpec["series"] = [
       { points: materialCurve, color: wlColor, width: 2.4 },
     ];
-    if (compareCurve && compareCurve.length > 0) {
+    if (compareCurve && compareCurve.length > 0 && !comparisonIsCurrent) {
       series.push({
         points: compareCurve,
         color: "rgba(148,163,184,0.85)",
@@ -132,7 +137,7 @@
 </script>
 
 <div class="graphs">
-  {#if ivSpec}
+  {#if tab === "iv" && ivSpec}
     <div class="graph-card rise">
       <div class="graph-head">
         <div>
@@ -147,12 +152,14 @@
       <Plot spec={ivSpec.spec} height={250} exportName="iv" />
       <div class="legend small">
         <span><i style:background={wlColor}></i> {lab.titleFor(lab.controls.material)}</span>
-        <span class="muted"><i class="dash"></i> {comparisonLabel} (comparación)</span>
+        {#if comparisonLabel && !comparisonIsCurrent}
+          <span class="muted"><i class="dash"></i> {comparisonLabel} (comparación)</span>
+        {/if}
       </div>
     </div>
   {/if}
 
-  {#if kmaxSpec}
+  {#if tab === "kmax" && kmaxSpec}
     <div class="graph-card rise">
       <div class="graph-head">
         <div>
@@ -166,7 +173,9 @@
     </div>
   {/if}
 
-  <ExperimentPanel />
+  {#if tab === "experiment"}
+    <ExperimentPanel />
+  {/if}
 </div>
 
 <style>

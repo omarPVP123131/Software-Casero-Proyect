@@ -2,6 +2,7 @@
   // Barra superior: logo · escenario · sesión · atajos · tema.
   import { lab } from "../lib/store.svelte";
   import { t } from "../lib/i18n";
+  import { paletteShortcut, redoShortcut, undoShortcut } from "../lib/platform";
   import { wavelengthToColor } from "../lib/spectrum";
 
   let {
@@ -31,6 +32,21 @@
   const accent = $derived(wavelengthToColor(lab.controls.wavelengthNm).css);
   let exportOpen = $state(false);
   let scenarioOpen = $state(false);
+  let barEl = $state<HTMLElement | null>(null);
+
+  function closeMenus(event: PointerEvent): void {
+    if (barEl && !barEl.contains(event.target as Node)) {
+      scenarioOpen = false;
+      exportOpen = false;
+    }
+  }
+
+  function closeOnEscape(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      scenarioOpen = false;
+      exportOpen = false;
+    }
+  }
 
   const scenarios = $derived([
     { id: "threshold" as const, label: s.scenarioThreshold },
@@ -40,7 +56,9 @@
   ]);
 </script>
 
-<header class="topbar" style:--wl={accent}>
+<svelte:window onpointerdown={closeMenus} onkeydown={closeOnEscape} />
+
+<header class="topbar" bind:this={barEl} style:--wl={accent}>
   <div class="brand">
     <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
       <rect width="32" height="32" rx="8" fill="var(--panel-2)" stroke="var(--line-strong)" />
@@ -58,7 +76,7 @@
   <div class="sep"></div>
 
   <div class="menu-wrap">
-    <button class="btn ghost" onclick={() => (scenarioOpen = !scenarioOpen)} aria-expanded={scenarioOpen} aria-haspopup="menu">
+    <button class="btn ghost" onclick={() => { scenarioOpen = !scenarioOpen; exportOpen = false; }} aria-expanded={scenarioOpen} aria-haspopup="menu">
       ⚗ {s.scenario}
       <span class="caret">▾</span>
     </button>
@@ -86,14 +104,14 @@
     {/if}
   </div>
 
-  <button class="btn ghost" onclick={onPalette} title={s.commandHint} aria-label={s.commandPalette}>
-    ⌘K <span class="small muted">{s.commandPalette}</span>
+  <button class="btn ghost" onclick={onPalette} title={`${s.commandHint} (${paletteShortcut})`} aria-label={s.commandPalette}>
+    {paletteShortcut} <span class="small muted">{s.commandPalette}</span>
   </button>
 
   <div class="sep"></div>
 
   <div class="menu-wrap">
-    <button class="btn ghost" onclick={() => (exportOpen = !exportOpen)} aria-expanded={exportOpen} aria-haspopup="menu">
+    <button class="btn ghost" onclick={() => { exportOpen = !exportOpen; scenarioOpen = false; }} aria-expanded={exportOpen} aria-haspopup="menu">
       {s.session}
       <span class="caret">▾</span>
     </button>
@@ -110,13 +128,17 @@
     {/if}
   </div>
 
-  <button class="btn ghost" onclick={onPresentation} title="F11" aria-label={s.presentation}>⛶</button>
+  <button class="btn ghost icon" onclick={onPresentation} title="F11" aria-label={s.presentation}>
+    <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+      <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+    </svg>
+  </button>
 
   <div class="spacer"></div>
 
   <div class="undo-redo">
-    <button class="btn ghost icon" onclick={() => lab.undo()} title="Ctrl+Z" aria-label={s.undo}>↶</button>
-    <button class="btn ghost icon" onclick={() => lab.redo()} title="Ctrl+Shift+Z" aria-label={s.redo}>↷</button>
+    <button class="btn ghost icon" onclick={() => lab.undo()} title={undoShortcut} aria-label={s.undo}>↶</button>
+    <button class="btn ghost icon" onclick={() => lab.redo()} title={redoShortcut} aria-label={s.redo}>↷</button>
   </div>
 
   <div class="theme-switch" role="group" aria-label={s.theme}>

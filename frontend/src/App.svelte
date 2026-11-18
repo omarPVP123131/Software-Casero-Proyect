@@ -7,7 +7,8 @@
   import { startClock, resetTime, stepFrame } from "./lib/playback";
   import { SCENARIOS } from "./lib/scenarios";
   import { saveSession, openSession, autosave, readAutosave } from "./lib/io";
-  import { experimentCsv } from "./lib/physics";
+  import { experimentCsv, isTauri } from "./lib/physics";
+  import { isMac } from "./lib/platform";
   import { canvasToPng, downloadBlob } from "./lib/plots";
   import type { ExperimentControls } from "./lib/types";
   import { wavelengthToColor } from "./lib/spectrum";
@@ -27,6 +28,32 @@
   let showNotebook = $state(false);
   let shortcutsOpen = $state(false);
   let dragging: { side: "left" | "right"; startX: number; startWidth: number } | null = null;
+
+  type PanelSide = "controls" | "readouts";
+  // A partir de 1180 px los paneles pasan a ser drawers superpuestos: así
+  // siguen accesibles en portátiles de 1024–1366 px.
+  let narrow = $state(
+    typeof window !== "undefined" && window.matchMedia("(max-width: 1180px)").matches,
+  );
+  let drawer = $state<PanelSide | null>(null);
+
+  function togglePanel(side: PanelSide): void {
+    if (narrow) {
+      drawer = drawer === side ? null : side;
+      return;
+    }
+    if (side === "controls") {
+      lab.setPreferences(
+        { controlsPanelOpen: !lab.preferences.controlsPanelOpen },
+        "Panel de controles",
+      );
+    } else {
+      lab.setPreferences(
+        { readoutsPanelOpen: !lab.preferences.readoutsPanelOpen },
+        "Panel de lecturas",
+      );
+    }
+  }
 
   onMount(() => {
     lab.restoreLocal();
@@ -56,10 +83,18 @@
       // el usuario puede reanudarla con el botón ▶ o con Espacio.
       lab.animating = false;
     }
+    const narrowQuery = window.matchMedia("(max-width: 1180px)");
+    const onNarrow = (event: MediaQueryListEvent): void => {
+      narrow = event.matches;
+      if (!event.matches) drawer = null;
+    };
+    narrow = narrowQuery.matches;
+    narrowQuery.addEventListener("change", onNarrow);
     return () => {
       stopClock();
       clearInterval(autoTimer);
       unsubscribers.forEach((u) => u());
+      narrowQuery.removeEventListener("change", onNarrow);
     };
   });
 
@@ -68,6 +103,16 @@
     document.documentElement.dataset.theme = lab.preferences.theme;
     document.documentElement.dataset.motion = lab.preferences.motion;
     document.documentElement.style.setProperty("--font-scale", String(lab.preferences.fontScale));
+  });
+
+  // La barra de título nativa sigue al tema de la app (Windows/macOS).
+  $effect(() => {
+    const nativeTheme = lab.preferences.theme === "light" ? "light" : "dark";
+    document.documentElement.style.colorScheme = nativeTheme;
+    if (!isTauri()) return;
+    void import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => getCurrentWindow().setTheme(nativeTheme))
+      .catch(() => {});
   });
 
   // color de acento global según λ (borde activo, foco, slider)
@@ -204,6 +249,11 @@
         else lab.undo();
         return;
       }
+      if (!isMac && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        lab.redo();
+        return;
+      }
       switch (event.key) {
         case " ":
           event.preventDefault();
@@ -237,6 +287,18 @@
           shortcutsOpen = !shortcutsOpen;
           break;
         case "Escape":
+          if (paletteOpen) {
+            paletteOpen = false;
+            break;
+          }
+          if (shortcutsOpen) {
+            shortcutsOpen = false;
+            break;
+          }
+          if (drawer) {
+            drawer = null;
+            break;
+          }
           if (lab.tutorial.active) lab.tutorial = { active: false, step: 0 };
           break;
       }
@@ -279,6 +341,17 @@
   const presentation = $derived(lab.preferences.presentationMode);
   const showControls = $derived(lab.preferences.controlsPanelOpen && !presentation);
   const showReadouts = $derived(lab.preferences.readoutsPanelOpen && !presentation);
+  const gridColumns = $derived(
+    narrow
+      ? "minmax(0, 1fr)"
+      : showControls && showReadouts
+        ? "var(--controls-w) 6px minmax(0, 1fr) 6px var(--readouts-w)"
+        : showControls
+          ? "var(--controls-w) 6px minmax(0, 1fr)"
+          : showReadouts
+            ? "minmax(0, 1fr) 6px var(--readouts-w)"
+            : "minmax(0, 1fr)",
+  );
 
   const tabs = $derived([
     { id: "cell" as const, label: s.tabsCell },
@@ -307,8 +380,8 @@
     onShortcuts={() => (shortcutsOpen = !shortcutsOpen)}
   />
 
-  <div class="workspace">
-    {#if showControls}
+  <div class="workspace" style:grid-template-columns={gridColumns}>
+    {#if !narrow && showControls}
       <div class="side left">
         <ControlsPanel />
       </div>
@@ -332,18 +405,46 @@
               class:active={lab.tab === tabDef.id}
               role="tab"
               aria-selected={lab.tab === tabDef.id}
-              onclick={() => (lab.tab = tabDef.id)}
+              onclick={() => { lab.tab = tabDef.id; drawer = null; }}
               onkeydown={(e) => {
                 if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
                   const index = tabs.findIndex((t) => t.id === lab.tab);
                   const next = (index + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
                   lab.tab = tabs[next].id;
+                  drawer = null;
                 }
               }}
             >{tabDef.label}</button>
           {/each}
         </div>
         <div class="tab-actions">
+          <button
+            class="btn ghost icon"
+            class:active={narrow ? drawer === "controls" : lab.preferences.controlsPanelOpen}
+            onclick={() => togglePanel("controls")}
+            title={s.controls}
+            aria-label={s.controls}
+            aria-pressed={narrow ? drawer === "controls" : lab.preferences.controlsPanelOpen}
+          >
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="M3 6h14M3 14h14" />
+              <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" />
+              <circle cx="13" cy="14" r="2" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+          <button
+            class="btn ghost icon"
+            class:active={narrow ? drawer === "readouts" : lab.preferences.readoutsPanelOpen}
+            onclick={() => togglePanel("readouts")}
+            title={s.readouts}
+            aria-label={s.readouts}
+            aria-pressed={narrow ? drawer === "readouts" : lab.preferences.readoutsPanelOpen}
+          >
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 16V9M10 16V4M16 16v-5" />
+            </svg>
+          </button>
+          <span class="tab-divider" aria-hidden="true"></span>
           <button class="btn ghost icon" onclick={() => (lab.animating = !lab.animating)} title="Espacio" aria-label="Pausar animación">
             {lab.animating ? "❚❚" : "▶"}
           </button>
@@ -367,13 +468,13 @@
           {/if}
         {:else}
           <div class="scroll-stage scroll">
-            <PanelGraphs />
+            <PanelGraphs tab={lab.tab} />
           </div>
         {/if}
       </div>
     </main>
 
-    {#if showReadouts}
+    {#if !narrow && showReadouts}
       <div
         class="resize-handle"
         role="separator"
@@ -388,6 +489,29 @@
       </div>
     {/if}
   </div>
+
+  {#if narrow && drawer}
+    <button class="drawer-scrim" aria-label={s.closePanel} onclick={() => (drawer = null)}></button>
+    <div
+      class="drawer"
+      class:right={drawer === "readouts"}
+      role="dialog"
+      aria-modal="true"
+      aria-label={drawer === "controls" ? s.controls : s.readouts}
+    >
+      <div class="drawer-head">
+        <span>{drawer === "controls" ? s.controls : s.readouts}</span>
+        <button class="btn ghost icon" onclick={() => (drawer = null)} aria-label={s.closePanel} title={s.closePanel}>✕</button>
+      </div>
+      <div class="drawer-body">
+        {#if drawer === "controls"}
+          <ControlsPanel />
+        {:else}
+          <ReadoutsPanel />
+        {/if}
+      </div>
+    </div>
+  {/if}
 
   <StatusBar />
   <CommandPalette bind:open={paletteOpen} onAction={paletteAction} />
@@ -491,7 +615,14 @@
   .tab-actions {
     margin-left: auto;
     display: flex;
+    align-items: center;
     gap: 2px;
+  }
+  .tab-divider {
+    width: 1px;
+    height: 20px;
+    margin: 0 4px;
+    background: var(--line);
   }
   .stage {
     flex: 1;
@@ -515,7 +646,85 @@
     max-height: 40%;
     overflow-y: auto;
   }
-  @media (max-width: 1100px) {
+  /* Drawers para ventanas estrechas (1024–1180 px): los paneles se abren
+     encima del escenario en lugar de robarle ancho. */
+  .drawer-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    border: 0;
+    padding: 0;
+    background: rgba(3, 7, 18, 0.55);
+    backdrop-filter: blur(1.5px);
+    cursor: pointer;
+    animation: scrim-in var(--dur-1) var(--ease);
+  }
+  .drawer {
+    position: fixed;
+    z-index: 41;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    width: min(380px, 88vw);
+    background: var(--panel-solid);
+    border-right: 1px solid var(--line-strong);
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.45);
+    animation: drawer-in var(--dur-2) var(--ease);
+  }
+  .drawer.right {
+    left: auto;
+    right: 0;
+    border-right: 0;
+    border-left: 1px solid var(--line-strong);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.45);
+  }
+  .drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.84em;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .drawer-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer-body > :global(*) {
+    min-height: 0;
+  }
+  @keyframes drawer-in {
+    from {
+      transform: translateX(-12px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  @keyframes scrim-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .drawer,
+    .drawer-scrim {
+      animation: none;
+    }
+  }
+  @media (max-width: 1180px) {
     .workspace {
       grid-template-columns: minmax(0, 1fr);
     }

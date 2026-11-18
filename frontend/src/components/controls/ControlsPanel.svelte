@@ -29,18 +29,25 @@
   // En pantallas bajas (1280×800 y similares) Material + Luz + Voltaje no
   // caben desplegados. "Compacto" deja Luz y Voltaje como una línea de
   // resumen con su slider en línea: todo el panel cabe sin scroll.
-  type Detail = "compacto" | "completo";
-  // null = automático: elige según el alto disponible y se readapta si
-  // cambias el tamaño de la ventana. Una elección manual manda sobre eso.
-  let detailChoice = $state<Detail | null>(null);
+  type Detail = "auto" | "compacto" | "completo";
+  // "auto" elige según el alto disponible y se readapta al redimensionar.
+  // Una elección manual manda hasta que se vuelve a "Auto".
+  let detailChoice = $state<Detail>("auto");
   let viewportH = $state(typeof window === "undefined" ? 900 : window.innerHeight);
 
-  const compact = $derived(detailChoice === null ? viewportH < 900 : detailChoice === "compacto");
-  const detail: Detail = $derived(compact ? "compacto" : "completo");
+  const compact = $derived(
+    detailChoice === "auto" ? viewportH < 900 : detailChoice === "compacto",
+  );
 
   function setDetail(next: Detail): void {
     detailChoice = next;
-    lab.status = next === "compacto" ? "Panel compacto: Luz y Voltaje en una línea." : "Panel completo: todas las secciones desplegadas.";
+    if (next === "auto") {
+      lab.status = "Detalle automático: compacto en ventanas bajas, completo si hay espacio.";
+    } else if (next === "compacto") {
+      lab.status = "Panel compacto: Luz y Voltaje en una línea.";
+    } else {
+      lab.status = "Panel completo: todas las secciones desplegadas.";
+    }
   }
 
   // --- scrub horizontal sobre la etiqueta numérica ---
@@ -106,14 +113,17 @@
 
 <aside class="controls-panel" aria-label="Controles del experimento">
   <div class="detail-row" role="group" aria-label="Nivel de detalle">
-    <span class="small muted" title={detailChoice === null ? "Automático según el alto de la ventana" : "Elegido a mano"}>
-      Detalle{detailChoice === null ? " · auto" : ""}
+    <span class="small muted" title={detailChoice === "auto" ? "Automático según el alto de la ventana" : "Elegido a mano"}>
+      Detalle{detailChoice === "auto" ? " · auto" : ""}
     </span>
     <div class="seg">
-      <button class="seg-btn" class:active={compact} aria-pressed={compact} onclick={() => setDetail("compacto")}>
+      <button class="seg-btn" class:active={detailChoice === "auto"} aria-pressed={detailChoice === "auto"} onclick={() => setDetail("auto")}>
+        Auto
+      </button>
+      <button class="seg-btn" class:active={detailChoice === "compacto"} aria-pressed={detailChoice === "compacto"} onclick={() => setDetail("compacto")}>
         Compacto
       </button>
-      <button class="seg-btn" class:active={!compact} aria-pressed={!compact} onclick={() => setDetail("completo")}>
+      <button class="seg-btn" class:active={detailChoice === "completo"} aria-pressed={detailChoice === "completo"} onclick={() => setDetail("completo")}>
         Completo
       </button>
     </div>
